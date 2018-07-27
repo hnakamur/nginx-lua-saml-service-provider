@@ -92,7 +92,7 @@ function _M.finish_login(self)
             string.format("failed to set session cookie during finish_login, err=%s", err)
     end
 
-    return true
+    return ngx.redirect(self.config.redirect_url_after_finish_login)
 end
 
 function _M.logout(self)
@@ -114,7 +114,7 @@ function _M.logout(self)
             string.format("failed to delete session cookie during logout, err=%s", err)
     end
 
-    return true
+    return ngx.redirect(self.config.redirect_url_after_logout)
 end
 
 

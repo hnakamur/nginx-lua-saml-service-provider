@@ -10,6 +10,8 @@ return {
         idp_cert_filename = "/usr/local/etc/idp.crt"
     },
     key_attribute_name = "mail",
+    redirect_url_after_finish_login = "/",
+    redirect_url_after_logout = "/",
     session = {
         cookie = {
             name = "sso_session_id",
