@@ -16,7 +16,7 @@ function _M.new(self, config)
     }, mt)
 end
 
-function _M.redirect_to_idp_to_sign_in(self)
+function _M.redirect_to_idp_to_login(self)
     local req, err = self:create_compress_base64encode_request()
     if err ~= nil then
         return nil, err
