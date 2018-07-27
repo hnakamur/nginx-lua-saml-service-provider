@@ -2,7 +2,7 @@ return {
     request = {
         idp_dest_url = "https://idp.example.net/sso_redirect",
         sp_entity_id = "https://sp.example.com/sso",
-        sp_saml_finish_url = "http://localhost/sso/finish-login",
+        sp_saml_finish_url = "https://sp.example.com/sso/finish-login",
         request_id_byte_length = 16
     },
     response = {
@@ -14,7 +14,7 @@ return {
         cookie = {
             name = "sso_session_id",
             path = "/",
-            secure = false
+            secure = true
         },
         store = {
             dict_name = "sso_sessions",
