@@ -52,7 +52,7 @@ function _M.take_attributes_from_response(self, response_xml)
     local inAttributeElem = false
     local inAttributeValueElem = false
     local attrs = {}
-    local attr_name
+    local attr_name = nil
 
     local handleStartElement = function(name, nsURI, nsPrefix)
         if nsPrefix == "saml" and name == "Attribute" then
@@ -92,6 +92,30 @@ function _M.take_attributes_from_response(self, response_xml)
     }
     parser:parse(response_xml, {stripWhitespace=true})
     return attrs
+end
+
+function _M.take_request_id_from_response(self, response_xml)
+    local onResponseElement = false
+    local request_id = nil
+
+    local handleStartElement = function(name, nsURI, nsPrefix)
+        if nsPrefix == "samlp" and name == "Response" then
+            onResponseElement = true
+        else
+            onResponseElement = false
+        end
+    end
+    local handleAttribute = function(name, value, nsURI, nsPrefix)
+        if onResponseElement and name == "InResponseTo" then
+            request_id = value
+        end
+    end
+    local parser = slaxml:parser{
+        startElement = handleStartElement,
+        attribute = handleAttribute
+    }
+    parser:parse(response_xml, {stripWhitespace=true})
+    return request_id
 end
 
 return _M

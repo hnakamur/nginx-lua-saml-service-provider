@@ -12,12 +12,18 @@ function _M.new(self, config)
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
         sp_saml_finish_url = config.sp_saml_finish_url,
-        request_id_generator = config.request_id_generator
+        request_id_generator = config.request_id_generator,
+        urls_before_login = config.urls_before_login
     }, mt)
 end
 
 function _M.redirect_to_idp_to_login(self)
-    local req, err = self:create_compress_base64encode_request()
+    local request_id, err = self:issue_request_id()
+    if err ~= nil then
+        return nil, err
+    end
+
+    local req, err = self:create_compress_base64encode_request(request_id)
     if err ~= nil then
         return nil, err
     end
@@ -25,8 +31,34 @@ function _M.redirect_to_idp_to_login(self)
     return ngx.redirect(url)
 end
 
-function _M.create_compress_base64encode_request(self)
-    local request_xml = self:create_request_xml()
+function _M.issue_request_id(self)
+    local dict_name = self.urls_before_login.dict_name
+    local expire_seconds = self.urls_before_login.expire_seconds
+    local request_id_generator = self.request_id_generator
+
+    local dict = dict_name ~= nil and ngx.shared[dict_name] or nil
+    if dict == nil then
+        return request_id_generator()
+    end
+
+    local url_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
+    local request_id, success, err, forcible
+    repeat
+        request_id = request_id_generator()
+        success, err, forcible = dict:add(request_id, url_before_login, expire_seconds)
+    until success or err ~= "exists"
+
+    if not success then
+        return nil,
+            string.format("error to add url before login, dict=%s, request_id=%s, err=%s, forcible=%s",
+                          dict_name, request_id, err, forcible)
+    end
+
+    return request_id
+end
+
+function _M.create_compress_base64encode_request(self, request_id)
+    local request_xml = self:create_request_xml(request_id)
     local compressed, err = self:compress(request_xml)
     if err ~= nil then
         return nil, err
@@ -35,8 +67,7 @@ function _M.create_compress_base64encode_request(self)
     return ngx.encode_base64(compressed)
 end
 
-function _M.create_request_xml(self)
-    local request_id = self.request_id_generator()
+function _M.create_request_xml(self, request_id)
     local now = ngx.utctime()
     local issue_instant = string.sub(now, 1, #"yyyy-mm-dd") .. "T" .. string.sub(now, -#"hh:mm:ss") .. "Z"
 
