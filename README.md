@@ -1,4 +1,4 @@
-lua-resty-saml-service-provider
+nginx-lua-saml-service-provider
 ===============================
 
 A simple SAML service provider library for [openresty/lua-nginx-module: Embed the Power of Lua into NGINX HTTP servers](https://github.com/openresty/lua-nginx-module).
@@ -14,7 +14,7 @@ If you want a full-fledged SAML service provider, go for [nginx-shib/nginx-http-
 * [openresty/lua-resty-string: String utilities and common hash functions for ngx_lua and LuaJIT](https://github.com/openresty/lua-resty-string)
 * [hamishforbes/lua-ffi-zlib](https://github.com/hamishforbes/lua-ffi-zlib)
 * [Phrogz/SLAXML: SAX-like streaming XML parser for Lua](https://github.com/Phrogz/SLAXML)
-* [hnakamur/lua-resty-session](https://github.com/hnakamur/lua-resty-session)
+* [hnakamur/nginx-lua-session](https://github.com/hnakamur/nginx-lua-session)
 * `xmlsec1` command with OpenSSL support in [XML Security Library](https://www.aleksey.com/xmlsec/)
 
 On CentOS7, you can install `xmlsec1` command with OpenSSL support with the following command:
