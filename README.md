@@ -12,6 +12,7 @@ If you want a full-fledged SAML service provider, go for [nginx-shib/nginx-http-
 ## Dependencies
 
 * [openresty/lua-resty-string: String utilities and common hash functions for ngx_lua and LuaJIT](https://github.com/openresty/lua-resty-string)
+* [openresty/lua-resty-lrucache: Lua-land LRU Cache based on LuaJIT FFI](https://github.com/openresty/lua-resty-lrucache)
 * [hamishforbes/lua-ffi-zlib](https://github.com/hamishforbes/lua-ffi-zlib)
 * [Phrogz/SLAXML: SAX-like streaming XML parser for Lua](https://github.com/Phrogz/SLAXML)
 * [hnakamur/nginx-lua-session](https://github.com/hnakamur/nginx-lua-session)
