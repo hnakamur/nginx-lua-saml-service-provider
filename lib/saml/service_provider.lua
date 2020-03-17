@@ -9,7 +9,7 @@ local resty_random = require "resty.random"
 local str = require "resty.string"
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.1.0' }
+local _M = { _VERSION = '0.1.1' }
 
 local mt = { __index = _M }
 
