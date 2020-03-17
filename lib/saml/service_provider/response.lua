@@ -70,7 +70,7 @@ function _M.take_attributes_from_response(self, response_xml)
             attr_name = value
         end
     end
-    local handleCloesElement = function(name, nsURI)
+    local handleCloseElement = function(name, nsURI)
         if nsPrefix == "saml" and name == "Attribute" then
             inAttributeElem = false
         end
