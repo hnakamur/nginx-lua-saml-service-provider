@@ -9,7 +9,7 @@ local resty_random = require "resty.random"
 local str = require "resty.string"
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.1.1' }
+local _M = { _VERSION = '0.9.0' }
 
 local mt = { __index = _M }
 
@@ -59,10 +59,18 @@ function _M.finish_login(self)
             string.format("failed to read and decode response during finish_login, err=%s", err)
     end
 
-    local ok, err = sp_resp:verify_response(response_xml)
-    if err ~= nil then
-        return false,
-            string.format("failed to verify response during finish_login, err=%s", err)
+    if self.idp_certificates ~= nil then
+        local err = sp_resp:verify_response_memory(response_xml)
+        if err ~= nil then
+            return false,
+                string.format("failed to verify response on memory during finish_login, err=%s", err)
+        end
+    else
+        local ok, err = sp_resp:verify_response(response_xml)
+        if err ~= nil then
+            return false,
+                string.format("failed to verify response during finish_login, err=%s", err)
+        end
     end
 
     local attrs, err = sp_resp:take_attributes_from_response(response_xml)
@@ -166,7 +174,9 @@ function _M.response(self)
     response = saml_sp_response:new{
         xmlsec_command = config.xmlsec_command,
         idp_cert_filename = config.idp_cert_filename,
-        key_attribute_name = config.key_attribute_name
+        key_attribute_name = config.key_attribute_name,
+        idp_certificates = config.idp_certificates,
+        id_attr = config.id_attr
     }
     self._response = response
     return response

@@ -14,8 +14,16 @@ return {
         }
     },
     response = {
-        xmlsec_command = "/usr/bin/xmlsec1",
-        idp_cert_filename = "/usr/local/etc/idp.crt"
+        idp_certicates = {
+[[-----BEGIN CERTIFICATE-----
+...
+-----END CERTIFICATE-----
+]]
+        },
+        id_attr = {
+            attrName = "ID", nodeName = "Response",
+            nsHref = "urn:oasis:names:tc:SAML:2.0:protocol"
+        }
     },
     session = {
         cookie = {

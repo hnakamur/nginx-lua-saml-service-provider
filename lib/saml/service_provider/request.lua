@@ -3,7 +3,7 @@
 local zlib = require "ffi-zlib"
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.1.1' }
+local _M = {}
 
 local mt = { __index = _M }
 
