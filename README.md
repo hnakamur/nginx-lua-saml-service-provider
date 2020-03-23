@@ -23,3 +23,12 @@ On Ubuntu, you can install `libxmlsec1` and `libxmlsec1-openssl` with the follow
 ```
 sudo apt-get install libxmlsec1 libxmlsec1-openssl
 ```
+
+Then, you need to create symbolic links for shared libraries like:
+
+```
+ln -s $(readlink /lib/x86_64-linux-gnu/libz.so.1) /lib/x86_64-linux-gnu/libz.so
+ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxml2.so.2) /usr/lib/x86_64-linux-gnu/libxml2.so
+ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1.so
+ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so
+```
