@@ -53,13 +53,13 @@ end
 function _M.finish_login(self)
     local sp_resp = self:response()
 
-    local response_xml, err = sp_resp:read_and_base64decode_response()
-    if err ~= nil then
+    local response_xml = sp_resp:read_and_base64decode_response()
+    if response_xml == nil then
         return false,
-            string.format("failed to read and decode response during finish_login, err=%s", err)
+            string.format("failed to read and decode response during finish_login")
     end
 
-    if self.idp_certificates ~= nil then
+    if self.config.response.idp_certificates ~= nil then
         local err = sp_resp:verify_response_memory(response_xml)
         if err ~= nil then
             return false,
@@ -102,17 +102,16 @@ function _M.finish_login(self)
 
     local dict_name = self.config.request.urls_before_login.dict_name
     local redirect_urls_dict = dict_name ~= nil and ngx.shared[dict_name] or nil
-    ngx.log(ngx.INFO, string.format("finish_login dict_name=%s, dict=%s", dict_name, redirect_urls_dict))
     if redirect_urls_dict ~= nil then
         local request_id, err = sp_resp:take_request_id_from_response(response_xml)
         if err ~= nil then
             return false,
                 string.format("failed to take request ID from response during finish_login, err=%s", err)
         end
-        ngx.log(ngx.INFO, string.format("finish_login request_id=%s", request_id))
+        ngx.log(ngx.INFO, "saml_request_id=", request_id)
 
         local redirect_url = redirect_urls_dict:get(request_id)
-        ngx.log(ngx.INFO, string.format("finish_login redirect_url=%s", redirect_url))
+        ngx.log(ngx.INFO, "saml_redirect_url=", redirect_url)
         if redirect_url ~= nil then
             redirect_urls_dict:delete(request_id)
             return ngx.redirect(redirect_url)

@@ -780,6 +780,8 @@ function _M.read_and_base64decode_response(self)
     if err ~= nil then
        return nil, string.format("failed to get post args to read SAML response, err=%s", err)
     end
+    -- NOTE: Long args.SAMLResponse will be truncated in nginx log without "..." suffix.
+    ngx.log(ngx.DEBUG, "args.SAMLResponse=", args.SAMLResponse)
 
     return ngx.decode_base64(args.SAMLResponse)
 end
@@ -895,6 +897,9 @@ end
 -- @param response_xml   response XML (string).
 -- @return err           nil if verified successfully, the error message otherwise (string).
 function _M.verify_response_memory(self, response_xml)
+    -- NOTE: Long response_xml will be truncated in nginx log without "..." suffix.
+    ngx.log(ngx.DEBUG, "response_xml=", response_xml)
+
     -- verify_response_memory was started as a lua port of examples/verify4.c.
     -- https://github.com/lsh123/xmlsec/blob/xmlsec-1_2_25/examples/verify4.c
     -- And then it is modified like below:
@@ -906,7 +911,8 @@ function _M.verify_response_memory(self, response_xml)
     --
     -- addIDAttr is a lua port of xmlSecAppAddIDAttr.
     -- https://github.com/lsh123/xmlsec/blob/xmlsec-1_2_25/apps/xmlsec.c#L2773-L2829
-    function addIDAttr(node, attrName, nodeName, nsHref)
+    local addIDAttr
+    addIDAttr = function(node, attrName, nodeName, nsHref)
         if node == nil or attrName == nil or nodeName == nil then
             return -1
         end
@@ -1075,6 +1081,9 @@ function _M.verify_response_memory(self, response_xml)
     xmlsec1openssl.xmlSecOpenSSLAppShutdown()
     xmlsec1.xmlSecShutdown()
     xml2.xmlCleanupParser()
+
+    -- NOTE: nil err means veirfy success.
+    ngx.log(ngx.DEBUG, "verify result err=", err)
     return err
 end
 
