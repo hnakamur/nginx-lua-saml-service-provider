@@ -14,7 +14,7 @@ return {
         }
     },
     response = {
-        idp_certicates = {
+        idp_certificates = {
 [[-----BEGIN CERTIFICATE-----
 ...
 -----END CERTIFICATE-----
