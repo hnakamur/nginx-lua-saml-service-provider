@@ -1,14 +1,12 @@
 -- Copyright (C) by Hiroaki Nakamura (hnakamur)
 
 local ffi = require "ffi"
-local xml2 = ffi.load("xml2")
-local slaxml = require 'slaxml'
-local xmlsec = require "saml.service_provider.xmlsec"
-local setmetatable = setmetatable
+local xmlsec1 = ffi.load("xmlsec1")
+local xmlsec1openssl = ffi.load("xmlsec1-openssl")
+local bit = require "bit"
+local bor = bit.bor
 
 local _M = {}
-
-local mt = { __index = _M }
 
 ffi.cdef([[
 
@@ -746,155 +744,207 @@ typedef unsigned char xmlSecByte;
 
 ]])
 
---- Creates a SAML response verifier object.
--- @param config              configuration options (table).
+--- Adds attributes <attrName> from all nodes with <nsHref>:<nodeName>.
+-- It provides the same effect as `xmlsec1 --id-attr:<attrName> <nsHref>:<nodeName>`
+-- See man xmlsec1(1).
 --
--- config.idp_certificates    IdP certificates (table of string).
--- config.id_attr             ID attribute (table with "attrName", "nodeName",
---                            and "nsHref" keys).
---                            Example:
---                            { attrName = "ID", nodeName = "Response",
---                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
--- Deprecated keys:
--- config.xmlsec_command      the filename of xmlsec1 command.
--- config.idp_cert_filename   the filename of IdP certificate.
--- @return a SAML response verifier object.
-function _M.new(self, config)
-    return setmetatable({
-        xmlsec_command = config.xmlsec_command,
-        idp_cert_filename = config.idp_cert_filename,
-        idp_certificates = config.idp_certificates,
-        id_attr = config.id_attr
-    }, mt)
-end
-
---- Read and base64 decode a SAML response from the request body.
--- @param self a SAML response veirifier.
--- @return a decoded SAML response.
-function _M.read_and_base64decode_response(self)
-    ngx.req.read_body()
-    local args, err = ngx.req.get_post_args()
-    if err ~= nil then
-       return nil, string.format("failed to get post args to read SAML response, err=%s", err)
-    end
-    -- NOTE: Long args.SAMLResponse will be truncated in nginx log without "..." suffix.
-    ngx.log(ngx.DEBUG, "args.SAMLResponse=", args.SAMLResponse)
-
-    return ngx.decode_base64(args.SAMLResponse)
-end
-
---- Verifies a SAML response with xmlsec1 command (Deprecated).
-function _M.verify_response(self, response_xml)
-    local tmpfilename = os.tmpname()
-    local file, err = io.open(tmpfilename, "w")
-    if err ~= nil then
-       return false, string.format("failed to open temporary file for writing SAML response, err=%s", err)
-    end
-    file:write(response_xml)
-    file:close()
-
-    local cmd = string.format("%s --verify --pubkey-cert-pem %s --id-attr:ID urn:oasis:names:tc:SAML:2.0:protocol:Response %s",
-        self.xmlsec_command, self.idp_cert_filename, tmpfilename)
-    local code = os.execute(cmd)
-    if code ~= 0 then
-       return false, string.format("failed to verify SAML response, exitcode=%d", code)
+-- addIDAttr is a lua port of xmlSecAppAddIDAttr.
+-- https://github.com/lsh123/xmlsec/blob/xmlsec-1_2_25/apps/xmlsec.c#L2773-L2829
+function addIDAttr(node, attrName, nodeName, nsHref)
+    if node == nil or attrName == nil or nodeName == nil then
+        return -1
     end
 
-    local ok, err = os.remove(tmpfilename)
-    if not ok then
-       return false, string.format("failed to delete SAML response tmpfile, filename=%s, err=%s", tmpfilename, err)
-    end
-    return true
-end
-
---- Take attributes from a SAML response.
--- @param self            a SAML response veirifier.
--- @param response_xml    a SAML response (string).
--- @return attributes (table).
-function _M.take_attributes_from_response(self, response_xml)
-    local onAttributeElemStart = false
-    local inAttributeElem = false
-    local inAttributeValueElem = false
-    local attrs = {}
-    local attr_name = nil
-
-    local handleStartElement = function(name, nsURI, nsPrefix)
-        if nsPrefix == "saml" and name == "Attribute" then
-            onAttributeElemStart = true
-            inAttributeElem = true
-        else
-            onAttributeElemStart = false
+    -- process children first because it does not matter much but does simplify code
+    local cur = xmlsec1.xmlSecGetNextElementNode(node.children)
+    while cur ~= nil do
+        if addIDAttr(cur, attrName, nodeName, nsHref) < 0 then
+            return -1
         end
-        if nsPrefix == "saml" and name == "AttributeValue" then
-            inAttributeValueElem = true
-        end
-    end
-    local handleAttribute = function(name, value, nsURI, nsPrefix)
-        if onAttributeElemStart and name == "Name" then
-            attr_name = value
-        end
-    end
-    local handleCloseElement = function(name, nsURI)
-        if nsPrefix == "saml" and name == "Attribute" then
-            inAttributeElem = false
-        end
-        if nsPrefix == "saml" and name == "AttributeValue" then
-            inAttributeValueElem = false
-        end
+        cur = xmlsec1.xmlSecGetNextElementNode(cur.next)
     end
 
-    local handleText = function(text)
-        if inAttributeValueElem then
-            attrs[attr_name] = text
-        end
+    -- node name must match
+    if xml2.xmlStrEqual(node.name, nodeName) ~= 1 then
+        return 0
     end
-    local parser = slaxml:parser{
-        startElement = handleStartElement,
-        attribute = handleAttribute,
-        closeElement = handleCloseElement,
-        text = handleText
-    }
-    parser:parse(response_xml, {stripWhitespace=true})
-    return attrs
-end
 
---- Take the request ID from a SAML response.
--- @param self            a SAML response veirifier.
--- @param response_xml    a SAML response (string).
--- @return the request ID (string).
-function _M.take_request_id_from_response(self, response_xml)
-    local onResponseElement = false
-    local request_id = nil
+    -- if nsHref is set then it also should match
+    if nsHref ~= nil and node.ns ~= nil and
+            xml2.xmlStrEqual(nsHref, ffi.string(node.ns.href)) ~= 1 then
+        return 0
+    end
 
-    local handleStartElement = function(name, nsURI, nsPrefix)
-        if nsPrefix == "samlp" and name == "Response" then
-            onResponseElement = true
-        else
-            onResponseElement = false
+    -- the attribute with name equal to attrName should exist
+    local found = false
+    local attr = node.properties
+    while attr ~= nil do
+        if xml2.xmlStrEqual(attr.name, attrName) == 1 then
+            found = true
+            break
         end
+        attr = attr.next
     end
-    local handleAttribute = function(name, value, nsURI, nsPrefix)
-        if onResponseElement and name == "InResponseTo" then
-            request_id = value
-        end
+    if not found then
+        return 0
     end
-    local parser = slaxml:parser{
-        startElement = handleStartElement,
-        attribute = handleAttribute
-    }
-    parser:parse(response_xml, {stripWhitespace=true})
-    return request_id
+
+    -- and this attr should have a value
+    local id = xml2.xmlNodeListGetString(node.doc, attr.children, 1)
+    if id == nil then
+        return 0
+    end
+
+    -- check that we don't have same ID already
+    local tmpAttr = xml2.xmlGetID(node.doc, id)
+    if tmpAttr == nil then
+        xml2.xmlAddID(nil, node.doc, id, attr)
+    elseif tmpAttr ~= attr then
+        xml2.xmlFree(id)
+        return -1
+    end
+    xml2.xmlFree(id)
+    return 0
 end
 
 --- Verifies a simple SAML response on memory.
 -- In addition to refular verification we ensure that the signature
 -- has only one <dsig:Reference/> element.
 --
--- @param self           a SAML response verifier.
--- @param response_xml   response XML (string).
+-- @param response_xml        response XML (string).
+-- @param idp_certificates    IdP certificates (table of string).
+-- @param id_attr             ID attribute (table with "attrName", "nodeName",
+--                            and "nsHref" keys).
+--                            Example:
+--                            { attrName = "ID", nodeName = "Response",
+--                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
 -- @return err           nil if verified successfully, the error message otherwise (string).
-function _M.verify_response_memory(self, response_xml)
-    return xmlsec.verify_response(response_xml, self.idp_certificates, self.id_attr)
+function _M.verify_response(self, response_xml, idp_certificates, id_attr)
+    -- verify_response_memory was started as a lua port of examples/verify4.c.
+    -- https://github.com/lsh123/xmlsec/blob/xmlsec-1_2_25/examples/verify4.c
+    -- And then it is modified like below:
+    -- * call addIDAttr
+    -- * read idp_certificates from memory, not from file.
+
+    -- NOTE: Long response_xml will be truncated in nginx log without "..." suffix.
+    ngx.log(ngx.DEBUG, "response_xml=", response_xml)
+
+    -- initialize
+    xml2.xmlInitParser()
+    xml2.xmlLoadExtDtdDefaultValue = bor(xml2.XML_DETECT_IDS, xml2.XML_COMPLETE_ATTRS)
+    xml2.xmlSubstituteEntitiesDefault(1)
+
+    local mngr, dsigCtx
+    local err = (function()
+        local ret = xmlsec1.xmlSecInit()
+        if ret < 0 then
+            return "xmlsec initialization failed."
+        end
+
+        ret = xmlsec1.xmlSecCheckVersionExt(
+                xmlsec1.XMLSEC_VERSION_MAJOR,
+                xmlsec1.XMLSEC_VERSION_MINOR,
+                xmlsec1.XMLSEC_VERSION_SUBMINOR,
+                xmlsec1.xmlSecCheckVersionABICompatible)
+        if ret ~= 1 then
+            return "loaded xmlsec library version is not compatible."
+        end
+
+        ret = xmlsec1openssl.xmlSecOpenSSLAppInit(nil)
+        if ret < 0 then
+            return "openssl initialization failed."
+        end
+
+        if xmlsec1openssl.xmlSecOpenSSLInit() < 0 then
+            return "xmlsec-openssl initialization failed."
+        end
+
+        mngr = xmlsec1.xmlSecKeysMngrCreate()
+        if mngr == nil then
+            return "failed to initialize keys manager."
+        end
+
+        if xmlsec1openssl.xmlSecOpenSSLAppDefaultKeysMngrInit(mngr) < 0 then
+            return "failed to initialize OpenSSL keys manager."
+        end
+
+        for _, cert in ipairs(idp_certificates) do
+            ret = xmlsec1openssl.xmlSecOpenSSLAppKeysMngrCertLoadMemory(
+                mngr, cert, #cert,
+                xmlsec1.xmlSecKeyDataFormatPem,
+                xmlsec1.xmlSecKeyDataTypeTrusted)
+            if ret < 0 then
+                return "failed to load pem certificate"
+            end
+        end
+
+        local doc = xml2.xmlParseDoc(response_xml)
+        if doc == nil then
+            return "unable to parse response xml"
+        end
+
+        local root = xml2.xmlDocGetRootElement(doc)
+        if root == nil then
+            return "unable to get root element of response xml"
+        end
+
+        if id_attr ~= nil then
+            local attrName = id_attr.attrName
+            local nodeName = id_attr.nodeName
+            local nsHref = id_attr.nsHref
+            local cur = xmlsec1.xmlSecGetNextElementNode(doc.children)
+            while cur ~= nil do
+                if addIDAttr(cur, attrName, nodeName, nsHref) < 0 then
+                    return string.format("failed to add ID attribute \"%s\" for node \"%s\"\n", attrName, nodeName)
+                end
+                cur = xmlsec1.xmlSecGetNextElementNode(cur.next)
+            end
+        end
+
+        local node = xmlsec1.xmlSecFindNode(root,
+                ffi.string(xmlsec1.xmlSecNodeSignature),
+                ffi.string(xmlsec1.xmlSecDSigNs))
+        if node == nil then
+            return "start node not found in response xml"
+        end
+
+        dsigCtx = xmlsec1.xmlSecDSigCtxCreate(mngr)
+        if dsigCtx == nil then
+            return "failed to create signature context"
+        end
+
+        ret = xmlsec1.xmlSecDSigCtxVerify(dsigCtx, node)
+        if ret < 0 then
+            return "failed to verify signature"
+        end
+
+        -- check that we have only one Reference
+        if dsigCtx.status == xmlsec1.xmlSecDSigStatusSucceeded and
+                xmlsec1.xmlSecPtrListGetSize(dsigCtx.signedInfoReferences) ~= 1 then
+            return "only one reference is allowed"
+        end
+
+        if dsigCtx.status ~= xmlsec1.xmlSecDSigStatusSucceeded then
+            return "verify status is not succeeded"
+        end
+        return nil
+    end)()
+
+    -- cleanup
+    if dsigCtx ~= nil then
+        xmlsec1.xmlSecDSigCtxDestroy(dsigCtx)
+    end
+    if mngr ~= nil then
+        xmlsec1.xmlSecKeysMngrDestroy(mngr)
+    end
+    xmlsec1openssl.xmlSecOpenSSLShutdown()
+    xmlsec1openssl.xmlSecOpenSSLAppShutdown()
+    xmlsec1.xmlSecShutdown()
+    xml2.xmlCleanupParser()
+
+    -- NOTE: nil err means veirfy success.
+    ngx.log(ngx.DEBUG, "verify result err=", err)
+    return err
 end
 
 return _M
