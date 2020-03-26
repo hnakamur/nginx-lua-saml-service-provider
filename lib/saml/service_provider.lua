@@ -59,7 +59,7 @@ function _M.finish_login(self)
             string.format("failed to read and decode response during finish_login")
     end
 
-    if self.config.response.idp_certificates ~= nil then
+    if self.config.response.idp_certificate ~= nil then
         local err = sp_resp:verify_response_memory(response_xml)
         if err ~= nil then
             return false,
@@ -169,14 +169,7 @@ function _M.response(self)
         return response
     end
 
-    local config = self.config.response
-    response = saml_sp_response:new{
-        xmlsec_command = config.xmlsec_command,
-        idp_cert_filename = config.idp_cert_filename,
-        key_attribute_name = config.key_attribute_name,
-        idp_certificates = config.idp_certificates,
-        id_attr = config.id_attr
-    }
+    response = saml_sp_response:new(self.config.response)
     self._response = response
     return response
 end

@@ -1,8 +1,7 @@
 package.path = '../lib/?.lua;;../../../Phrogz/SLAXML/?.lua;;'
-local response = require 'saml.service_provider.response'
+local xmlsec = require 'saml.service_provider.xmlsec'
 
-local certificates = {
-[[-----BEGIN CERTIFICATE-----
+local certificate = [[-----BEGIN CERTIFICATE-----
 MIIFlTCCA32gAwIBAgIBATANBgkqhkiG9w0BAQsFADBsMQswCQYDVQQGEwJKUDEO
 MAwGA1UECAwFT3Nha2ExLDAqBgNVBAoMI0V4YW1wbGUgc2VsZi1zaWduZWQgQ0Eg
 b3JnYW5pemF0aW9uMR8wHQYDVQQDDBZFeGFtcGxlIHNlbGYtc2lnbmVkIENBMB4X
@@ -35,7 +34,6 @@ dWc+TLNB2X+D6x9oTmzHkdLCfjWSUmGqZ+JyBo755tVJC5iAiSjqvaUEJGNWz2ka
 ZUZuh1KuSsL4K1kqFxYGZd2vSO8h5COahlVYCxLgX9F6z+7tj1LCms8=
 -----END CERTIFICATE-----
 ]]
-}
 
 local response_xml = [[<?xml version="1.0"?>
 <samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_EXAMPLE_SSO_c49c68da-0f9a-4b33-afb0-0f55e7ecd18b" Version="2.0" IssueInstant="2020-03-17T21:56:15Z" Destination="https://sp.example.com/sso/saml2" InResponseTo="_888e7b875b0b96ff109dbcdd1b969aa0">
@@ -138,9 +136,5 @@ local id_attr = {
     attrName = "ID", nodeName = "Response",
     nsHref = "urn:oasis:names:tc:SAML:2.0:protocol"
 }
-local verifier = response:new{
-    idp_certificates = certificates,
-    id_attr = id_attr
-}
-local err = verifier:verify_response_memory(response_xml)
+local err = xmlsec.verify_response(response_xml, certificate, id_attr)
 print(string.format("err=%s", err))
