@@ -4,9 +4,8 @@ local session_cookie = require "session.cookie"
 local session_store = require "session.store"
 local saml_sp_request = require "saml.service_provider.request"
 local saml_sp_response = require "saml.service_provider.response"
+local random = require "saml.service_provider.random"
 
-local resty_random = require "resty.random"
-local str = require "resty.string"
 local setmetatable = setmetatable
 
 local _M = { _VERSION = '0.9.0' }
@@ -156,7 +155,7 @@ function _M.request(self)
         sp_saml_finish_url = config.sp_saml_finish_url,
         urls_before_login = config.urls_before_login,
         request_id_generator = function()
-            return "_" .. str.to_hex(resty_random.bytes(config.request_id_byte_length or 16))
+            return "_" .. random.hex(config.request_id_byte_length or 16)
         end
     }
     self._request = request
@@ -200,7 +199,7 @@ function _M.session_store(self)
     store = session_store:new{
         dict_name = config.dict_name,
         id_generator = function()
-            return str.to_hex(resty_random.bytes(config.id_byte_length or 16))
+            return random.hex(config.request_id_byte_length or 16)
         end
     }
     self._session_store = store

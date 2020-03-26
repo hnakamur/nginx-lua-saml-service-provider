@@ -1,25 +1,47 @@
 -- Copyright (C) by Hiroaki Nakamura (hnakamur)
 
-local resty_random = require "resty.random"
-local str = require "resty.string"
+local ffi = require("ffi")
+local ffi_new = ffi.new
+local ffi_str = ffi.string
+local C = ffi.C
+local ssl = ffi.load("ssl")
+
+ffi.cdef[[
+int RAND_bytes(unsigned char *buf, int num);
+]]
 
 local _M = {}
 
-function _M.hex(length, strong)
-    local random = resty_random.bytes(length, strong)
-    return str.to_hex(random)
+function _M.bytes(len)
+    local buf = ffi_new("char[?]", len)
+    if ssl.RAND_bytes(buf, len) == 0 then
+        return nil
+    end
+
+    return ffi_str(buf, len)
 end
 
-function _M.uuid_v4(strong)
-    local random = resty_random.bytes(16, strong)
+function _M.to_hex(bytes)
+    local h = string.gsub(bytes, "(.)", function(c)
+        return string.format("%02x", string.byte(c))
+    end)
+    return h
+end
+
+function _M.hex(byte_length)
+    return _M.to_hex(_M.bytes(byte_length))
+end
+
+function _M.uuid_v4()
+    local random = _M.bytes(16)
     local c7 = string.char(bit.bor(bit.band(
         string.byte(string.sub(random, 7, 7)), 0x0F), 0x40))
     local c9 = string.char(bit.bor(bit.band(
         string.byte(string.sub(random, 9, 9)), 0x3F), 0x80))
-    return str.to_hex(string.sub(random, 1, 4)) ..  "-" ..
-           str.to_hex(string.sub(random, 5, 6)) .. "-" ..
-           str.to_hex(c7) ..  str.to_hex(string.sub(random, 8, 8)) .. "-" ..
-           str.to_hex(c9) ..  str.to_hex(string.sub(random, 10, 16))
+    return _M.to_hex(string.sub(random, 1, 4)) ..  "-" ..
+           _M.to_hex(string.sub(random, 5, 6)) .. "-" ..
+           _M.to_hex(c7) ..  _M.to_hex(string.sub(random, 8, 8)) .. "-" ..
+           _M.to_hex(c9) ..  _M.to_hex(string.sub(random, 10, 16))
 end
 
 return _M
