@@ -1,6 +1,7 @@
 -- Copyright (C) by Hiroaki Nakamura (hnakamur)
 
 local ffi = require "ffi"
+local xml2 = ffi.load("xml2")
 local xmlsec1 = ffi.load("xmlsec1")
 local xmlsec1openssl = ffi.load("xmlsec1-openssl")
 local bit = require "bit"
@@ -354,7 +355,14 @@ typedef void (/* XMLCALL */ *xmlFreeFunc)(void *mem);
 */
 xmlFreeFunc xmlFree;
 
+/* XMLPUBFUN */ void /* XMLCALL */
+		xmlDocDumpMemory	(xmlDocPtr cur,
+					         xmlChar **mem,
+					         int *size);
 
+/* XMLPUBFUN */ xmlNodePtr /* XMLCALL */
+                xmlAddChild             (xmlNodePtr parent,
+                                         xmlNodePtr cur);
 
 //-------------------------------------------------------
 // typedef and constants from libxmlsec1 1.2.25
@@ -722,6 +730,39 @@ int               xmlSecDSigCtxVerify             (xmlSecDSigCtxPtr dsigCtx,    
 
 xmlSecSize        xmlSecPtrListGetSize            (xmlSecPtrListPtr list);
 
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplSignatureCreate        (xmlDocPtr doc,
+                                                                 xmlSecTransformId c14nMethodId,
+                                                                 xmlSecTransformId signMethodId,
+                                                                 const xmlChar *id);
+
+// #define xmlSecTransformExclC14NId \
+//         xmlSecTransformExclC14NGetKlass()
+/* XMLSEC_EXPORT */ xmlSecTransformId xmlSecTransformExclC14NGetKlass         (void);
+
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplSignatureAddReference  (xmlNodePtr signNode,
+                                                                 xmlSecTransformId digestMethodId,
+                                                                 const xmlChar *id,
+                                                                 const xmlChar *uri,
+                                                                 const xmlChar *type);
+
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplReferenceAddTransform  (xmlNodePtr referenceNode,
+                                                                 xmlSecTransformId transformId);
+
+// #define xmlSecTransformEnvelopedId \
+//         xmlSecTransformEnvelopedGetKlass()
+/* XMLSEC_EXPORT */ xmlSecTransformId xmlSecTransformEnvelopedGetKlass        (void);
+
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplSignatureEnsureKeyInfo (xmlNodePtr signNode,
+                                                                 const xmlChar *id);
+
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplKeyInfoAddX509Data     (xmlNodePtr keyInfoNode);
+
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplX509DataAddSubjectName (xmlNodePtr x509DataNode);
+/* XMLSEC_EXPORT */ xmlNodePtr xmlSecTmplX509DataAddCertificate (xmlNodePtr x509DataNode);
+
+/* XMLSEC_EXPORT */ int               xmlSecDSigCtxSign         (xmlSecDSigCtxPtr dsigCtx,
+                                                                 xmlNodePtr tmpl);
+
 
 //-------------------------------------------------------
 // typedef and constants from libxmlsec1-openssl 1.2.25
@@ -741,6 +782,26 @@ typedef unsigned char xmlSecByte;
                                                                       xmlSecSize dataSize,
                                                                       xmlSecKeyDataFormat format,
                                                                       xmlSecKeyDataType type);
+
+/* XMLSEC_CRYPTO_EXPORT */ xmlSecKeyPtr xmlSecOpenSSLAppKeyLoadMemory   (const xmlSecByte* data,
+                                                                         xmlSecSize dataSize,
+                                                                         xmlSecKeyDataFormat format,
+                                                                         const char *pwd,
+                                                                         void* pwdCallback,
+                                                                         void* pwdCallbackCtx);
+
+/* XMLSEC_CRYPTO_EXPORT */ int         xmlSecOpenSSLAppKeyCertLoadMemory(xmlSecKeyPtr key,
+                                                                         const xmlSecByte * data,
+                                                                         xmlSecSize dataSize,
+                                                                         xmlSecKeyDataFormat format);
+
+// #define xmlSecOpenSSLTransformRsaSha1Id \
+//         xmlSecOpenSSLTransformRsaSha1GetKlass()
+/* XMLSEC_CRYPTO_EXPORT */ xmlSecTransformId xmlSecOpenSSLTransformRsaSha1GetKlass(void);
+
+// #define xmlSecOpenSSLTransformSha1Id \
+//         xmlSecOpenSSLTransformSha1GetKlass()
+/* XMLSEC_CRYPTO_EXPORT */ xmlSecTransformId xmlSecOpenSSLTransformSha1GetKlass(void);
 
 ]])
 
@@ -818,8 +879,8 @@ end
 --                            Example:
 --                            { attrName = "ID", nodeName = "Response",
 --                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
--- @return err           nil if verified successfully, the error message otherwise (string).
-function _M.verify_response(self, response_xml, idp_certificates, id_attr)
+-- @return err                nil if verified successfully, the error message otherwise (string).
+function _M.verify_response(response_xml, idp_certificates, id_attr)
     -- verify_response_memory was started as a lua port of examples/verify4.c.
     -- https://github.com/lsh123/xmlsec/blob/xmlsec-1_2_25/examples/verify4.c
     -- And then it is modified like below:
@@ -942,9 +1003,182 @@ function _M.verify_response(self, response_xml, idp_certificates, id_attr)
     xmlsec1.xmlSecShutdown()
     xml2.xmlCleanupParser()
 
-    -- NOTE: nil err means veirfy success.
+    -- NOTE: nil err means verify success.
     ngx.log(ngx.DEBUG, "verify result err=", err)
     return err
+end
+
+--- Signs a simple SAML response on memory.
+--
+-- @param response_xml        response XML (string).
+-- @param idp_key             IdP key (string).
+-- @param idp_cert            IdP certificate (string).
+-- @param id_attr             ID attribute (table with "attrName", "nodeName",
+--                            and "nsHref" keys).
+--                            Example:
+--                            { attrName = "ID", nodeName = "Response",
+--                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
+-- @return signed_response    signed response (string).
+-- @return err                nil if signed successfully, the error message otherwise (string).
+function _M.sign_response(response_xml, idp_key, idp_cert, id_attr)
+    -- verify_response_memory was started as a lua port of examples/sign3.c.
+    -- https://github.com/lsh123/xmlsec/blob/xmlsec-1_2_25/examples/sign3.c
+    -- And then it is modified like below:
+    -- * call addIDAttr
+    -- * read idp_key and idp_cert from memory, not from files.
+
+    -- NOTE: Long response_xml will be truncated in nginx log without "..." suffix.
+    -- print("response_xml=", response_xml)
+
+    -- initialize
+    xml2.xmlInitParser()
+    xml2.xmlLoadExtDtdDefaultValue = bor(xml2.XML_DETECT_IDS, xml2.XML_COMPLETE_ATTRS)
+    xml2.xmlSubstituteEntitiesDefault(1)
+
+    local dsigCtx
+    local signed_response, err = (function()
+        local ret = xmlsec1.xmlSecInit()
+        if ret < 0 then
+            return nil, "xmlsec initialization failed."
+        end
+
+        ret = xmlsec1.xmlSecCheckVersionExt(
+                xmlsec1.XMLSEC_VERSION_MAJOR,
+                xmlsec1.XMLSEC_VERSION_MINOR,
+                xmlsec1.XMLSEC_VERSION_SUBMINOR,
+                xmlsec1.xmlSecCheckVersionABICompatible)
+        if ret ~= 1 then
+            return nil, "loaded xmlsec library version is not compatible."
+        end
+
+        ret = xmlsec1openssl.xmlSecOpenSSLAppInit(nil)
+        if ret < 0 then
+            return nil, "openssl initialization failed."
+        end
+
+        if xmlsec1openssl.xmlSecOpenSSLInit() < 0 then
+            return nil, "xmlsec-openssl initialization failed."
+        end
+
+        local doc = xml2.xmlParseDoc(response_xml)
+        if doc == nil then
+            return nil, "unable to parse response xml"
+        end
+
+        local root = xml2.xmlDocGetRootElement(doc)
+        if root == nil then
+            return nil, "unable to get root element of response xml"
+        end
+
+        if id_attr ~= nil then
+            local attrName = id_attr.attrName
+            local nodeName = id_attr.nodeName
+            local nsHref = id_attr.nsHref
+            local cur = xmlsec1.xmlSecGetNextElementNode(doc.children)
+            while cur ~= nil do
+                if addIDAttr(cur, attrName, nodeName, nsHref) < 0 then
+                    return string.format("failed to add ID attribute \"%s\" for node \"%s\"\n", attrName, nodeName)
+                end
+                cur = xmlsec1.xmlSecGetNextElementNode(cur.next)
+            end
+        end
+
+        -- create signature template for RSA-SHA1 enveloped signature
+        local xmlSecTransformExclC14NId = xmlsec1.xmlSecTransformExclC14NGetKlass()
+        local xmlSecTransformRsaSha1Id = xmlsec1openssl.xmlSecOpenSSLTransformRsaSha1GetKlass()
+        local signNode = xmlsec1.xmlSecTmplSignatureCreate(
+            doc, xmlSecTransformExclC14NId,
+            xmlSecTransformRsaSha1Id, nil)
+        if signNode == nil then
+            return nil, "failed to create signature template"
+        end
+
+        -- add <dsig:Signature/> node to the doc
+        xml2.xmlAddChild(root, signNode)
+
+        -- add reference
+        local xmlSecTransformSha1Id = xmlsec1openssl.xmlSecOpenSSLTransformSha1GetKlass()
+        local refNode = xmlsec1.xmlSecTmplSignatureAddReference(
+            signNode, xmlSecTransformSha1Id,
+            nil, nil, nil)
+        if refNode == nil then
+            return nil, "failed to add reference to signature template"
+        end
+
+        -- add enveloped transform
+        local xmlSecTransformEnvelopedId = xmlsec1.xmlSecTransformEnvelopedGetKlass()
+        if xmlsec1.xmlSecTmplReferenceAddTransform(refNode, xmlSecTransformEnvelopedId) == nil then
+            return nil, "failed to add enveloped transform to reference"
+        end
+        
+        -- add <dsig:KeyInfo/> and <dsig:X509Data/>
+        local keyInfoNode = xmlsec1.xmlSecTmplSignatureEnsureKeyInfo(signNode, nil)
+        if keyInfoNode == nil then
+            return nil, "failed to add key info"
+        end
+        
+        local x509DataNode = xmlsec1.xmlSecTmplKeyInfoAddX509Data(keyInfoNode)
+        if x509DataNode == nil then
+            return nil, "failed to add X509Data node"
+        end
+    
+        if xmlsec1.xmlSecTmplX509DataAddSubjectName(x509DataNode) == nil then
+            return nil, "failed to add X509SubjectName node"
+        end
+    
+        if xmlsec1.xmlSecTmplX509DataAddCertificate(x509DataNode) == nil then
+            return nil, "failed to add X509Certificate node"
+        end
+    
+        -- create signature context, we don't need keys manager in this function
+        dsigCtx = xmlsec1.xmlSecDSigCtxCreate(nil)
+        if dsigCtx == nil then
+            return nil, "failed to create signature context"
+        end
+
+        -- load private key, assuming that there is not password
+        dsigCtx.signKey = xmlsec1openssl.xmlSecOpenSSLAppKeyLoadMemory(idp_key, #idp_key, xmlsec1.xmlSecKeyDataFormatPem, nil, nil, nil)
+        if dsigCtx.signKey == nil then
+            return nil, "failed to load private pem key on memory"
+        end
+        
+        -- load certificate and add to the key
+        if xmlsec1openssl.xmlSecOpenSSLAppKeyCertLoadMemory(dsigCtx.signKey, idp_cert, #idp_cert, xmlsec1.xmlSecKeyDataFormatPem) < 0 then
+            return nil, "failed to load pem certificate on memory"
+        end
+    
+--        -- set key name to the file name, this is just an example!
+--        if xmlsec1.xmlSecKeySetName(dsigCtx.signKey, key_file) < 0) {
+--            fprintf(stderr,"Error: failed to set key name for key from \"%s\"\n", key_file);
+--            goto done;
+--        }
+    
+        -- sign the template
+        if xmlsec1.xmlSecDSigCtxSign(dsigCtx, signNode) < 0 then
+            return nil, "signature failed"
+        end
+            
+        -- dump signed document
+        local dumped_xml = ffi.new("xmlChar*[1]")
+        local dumped_size = ffi.new("int[1]")
+		xml2.xmlDocDumpMemory(doc, dumped_xml, dumped_size)
+        local signed_response = ffi.string(dumped_xml[0], dumped_size[0])
+        xml2.xmlFree(dumped_xml[0])
+        
+        -- success
+        return signed_response, nil
+    end)()
+
+    -- cleanup
+    if dsigCtx ~= nil then
+        xmlsec1.xmlSecDSigCtxDestroy(dsigCtx)
+    end
+    xmlsec1openssl.xmlSecOpenSSLShutdown()
+    xmlsec1openssl.xmlSecOpenSSLAppShutdown()
+    xmlsec1.xmlSecShutdown()
+    xml2.xmlCleanupParser()
+
+    return signed_response, err
 end
 
 return _M
