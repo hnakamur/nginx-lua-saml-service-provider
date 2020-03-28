@@ -1,0 +1,2 @@
+test_files/idp/etc/nginx/saml/idp.example.com.key
+test_files/idp/etc/nginx/saml/idp.example.com.crt

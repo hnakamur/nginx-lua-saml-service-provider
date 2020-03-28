@@ -1,6 +1,6 @@
 #!/bin/sh
-sp_base_url=https://sp.example.com
-resolves="--resolve sp.example.com:443:127.0.0.1 --resolve idp.example.com:443:127.0.0.1"
+sp_base_url=https://sp
+resolves=""
 
 if [ $# -eq 1 -a "$1" = '--verbose' ]; then
     curl_verbose_opt=-v

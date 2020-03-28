@@ -17,17 +17,12 @@ RUN apt-get update \
  && ln -s /dev/stdout /var/log/nginx/access.log \
  && ln -s /dev/stderr /var/log/nginx/error.log
 
-COPY example_config/etc/nginx/conf.d /etc/nginx/conf.d/
-COPY example_config/etc/nginx/lua /etc/nginx/lua/
-COPY example_config/etc/nginx/saml /etc/nginx/saml/
-COPY example_config/etc/nginx/nginx.conf /etc/nginx/nginx.conf
 COPY lib/ /usr/lib/nginx/lua/
+COPY test_files/idp/etc/nginx/conf.d /etc/nginx/conf.d/
+COPY test_files/idp/etc/nginx/lua /etc/nginx/lua/
+COPY test_files/idp/etc/nginx/saml /etc/nginx/saml/
+COPY test_files/idp/etc/nginx/nginx.conf /etc/nginx/nginx.conf
 
-RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
-    -set_serial 2 \
-    -days 365 \
-    -subj "/C=JP/ST=Osaka/L=Osaka City/CN=sp.example.com" \
-    -out /etc/nginx/saml/sp.example.com.crt \
-    -keyout /etc/nginx/saml/sp.example.com.key
+RUN apt-get install -y iputils-ping netcat
 
 CMD ["/usr/sbin/nginx", "-g", "daemon off;"]

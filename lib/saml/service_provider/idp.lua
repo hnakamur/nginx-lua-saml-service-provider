@@ -72,7 +72,8 @@ function _M.generate_response(res_tmpl, params)
     local audience = params.audience
     local name_qualifier = params.name_qualifier
     local name_id = params.name_id
-    local mail_address = params.mail_address
+    local attribute_name = params.attribute_name
+    local attribute_value = params.attribute_value
 
     local assertion_id = params.assertion_id()
     local session_id = params.session_id()
@@ -108,8 +109,8 @@ function _M.generate_response(res_tmpl, params)
     res = string.gsub(res, '{{ name_id }}', name_id)
 
     -- NOTE: We support only one attribute here.
-    res = string.gsub(res, '{{ key }}', 'mail')
-    res = string.gsub(res, '{{ value }}', mail_address)
+    res = string.gsub(res, '{{ key }}', attribute_name)
+    res = string.gsub(res, '{{ value }}', attribute_value)
     res = string.gsub(res, '      {%% for key, value in attributes.items %%}\n', '')
     res = string.gsub(res, '      {%% endfor %%}\n', '')
 

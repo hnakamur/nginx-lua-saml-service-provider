@@ -21,7 +21,8 @@ local params = idp.take_parameters_from_request(saml_req)
 params.audience = "https://sp.example.com/sso"
 params.name_qualifier = "idp.example.com"
 params.name_id = 'john-doe'
-params.mail_address = 'john.doe@example.com'
+params.attribute_name = config.key_attribute_name
+params.attribute_value = 'john.doe@example.com'
 params.assertion_id = function()
     return "_a" .. random.hex(16)
 end
