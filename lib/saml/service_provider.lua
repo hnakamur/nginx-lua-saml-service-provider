@@ -4,12 +4,11 @@ local session_cookie = require "session.cookie"
 local session_store = require "session.store"
 local saml_sp_request = require "saml.service_provider.request"
 local saml_sp_response = require "saml.service_provider.response"
+local random = require "saml.service_provider.random"
 
-local resty_random = require "resty.random"
-local str = require "resty.string"
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.1.1' }
+local _M = { _VERSION = '0.9.0' }
 
 local mt = { __index = _M }
 
@@ -53,16 +52,24 @@ end
 function _M.finish_login(self)
     local sp_resp = self:response()
 
-    local response_xml, err = sp_resp:read_and_base64decode_response()
-    if err ~= nil then
+    local response_xml = sp_resp:read_and_base64decode_response()
+    if response_xml == nil then
         return false,
-            string.format("failed to read and decode response during finish_login, err=%s", err)
+            string.format("failed to read and decode response during finish_login")
     end
 
-    local ok, err = sp_resp:verify_response(response_xml)
-    if err ~= nil then
-        return false,
-            string.format("failed to verify response during finish_login, err=%s", err)
+    if self.config.response.idp_certificate ~= nil then
+        local err = sp_resp:verify_response_memory(response_xml)
+        if err ~= nil then
+            return false,
+                string.format("failed to verify response on memory during finish_login, err=%s", err)
+        end
+    else
+        local ok, err = sp_resp:verify_response(response_xml)
+        if err ~= nil then
+            return false,
+                string.format("failed to verify response during finish_login, err=%s", err)
+        end
     end
 
     local attrs, err = sp_resp:take_attributes_from_response(response_xml)
@@ -94,17 +101,16 @@ function _M.finish_login(self)
 
     local dict_name = self.config.request.urls_before_login.dict_name
     local redirect_urls_dict = dict_name ~= nil and ngx.shared[dict_name] or nil
-    ngx.log(ngx.INFO, string.format("finish_login dict_name=%s, dict=%s", dict_name, redirect_urls_dict))
     if redirect_urls_dict ~= nil then
         local request_id, err = sp_resp:take_request_id_from_response(response_xml)
         if err ~= nil then
             return false,
                 string.format("failed to take request ID from response during finish_login, err=%s", err)
         end
-        ngx.log(ngx.INFO, string.format("finish_login request_id=%s", request_id))
+        ngx.log(ngx.INFO, "saml_request_id=", request_id)
 
         local redirect_url = redirect_urls_dict:get(request_id)
-        ngx.log(ngx.INFO, string.format("finish_login redirect_url=%s", redirect_url))
+        ngx.log(ngx.INFO, "saml_redirect_url=", redirect_url)
         if redirect_url ~= nil then
             redirect_urls_dict:delete(request_id)
             return ngx.redirect(redirect_url)
@@ -149,7 +155,7 @@ function _M.request(self)
         sp_saml_finish_url = config.sp_saml_finish_url,
         urls_before_login = config.urls_before_login,
         request_id_generator = function()
-            return "_" .. str.to_hex(resty_random.bytes(config.request_id_byte_length or 16))
+            return "_" .. random.hex(config.request_id_byte_length or 16)
         end
     }
     self._request = request
@@ -162,12 +168,7 @@ function _M.response(self)
         return response
     end
 
-    local config = self.config.response
-    response = saml_sp_response:new{
-        xmlsec_command = config.xmlsec_command,
-        idp_cert_filename = config.idp_cert_filename,
-        key_attribute_name = config.key_attribute_name
-    }
+    response = saml_sp_response:new(self.config.response)
     self._response = response
     return response
 end
@@ -198,7 +199,7 @@ function _M.session_store(self)
     store = session_store:new{
         dict_name = config.dict_name,
         id_generator = function()
-            return str.to_hex(resty_random.bytes(config.id_byte_length or 16))
+            return random.hex(config.request_id_byte_length or 16)
         end
     }
     self._session_store = store

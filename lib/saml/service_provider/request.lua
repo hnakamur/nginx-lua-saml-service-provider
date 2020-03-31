@@ -3,7 +3,7 @@
 local zlib = require "ffi-zlib"
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.1.1' }
+local _M = {}
 
 local mt = { __index = _M }
 
@@ -72,7 +72,10 @@ function _M.create_request_xml(self, request_id)
     local issue_instant = string.sub(now, 1, #"yyyy-mm-dd") .. "T" .. string.sub(now, -#"hh:mm:ss") .. "Z"
 
     return string.format(
-        '<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" AssertionConsumerServiceURL="%s" Destination="%s" ID="%s" IssueInstant="%s" ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Version="2.0"><saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">%s</saml:Issuer><samlp:NameIDPolicy AllowCreate="1"/></samlp:AuthnRequest>',
+        [[<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" AssertionConsumerServiceURL="%s" Destination="%s" ID="%s" IssueInstant="%s" ProtocolBinding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Version="2.0">
+<saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">%s</saml:Issuer>
+<samlp:NameIDPolicy AllowCreate="1"/>
+</samlp:AuthnRequest>]],
         self.sp_saml_finish_url,
         self.idp_dest_url,
         request_id,

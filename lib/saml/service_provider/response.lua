@@ -1,29 +1,52 @@
 -- Copyright (C) by Hiroaki Nakamura (hnakamur)
 
+local ffi = require "ffi"
 local slaxml = require 'slaxml'
+local xmlsec = require "saml.service_provider.xmlsec"
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.1.1' }
+local _M = {}
 
 local mt = { __index = _M }
 
+--- Creates a SAML response verifier object.
+-- @param config              configuration options (table).
+--
+-- config.idp_certificate     IdP certificate (string).
+-- config.id_attr             ID attribute (table with "attrName", "nodeName",
+--                            and "nsHref" keys).
+--                            Example:
+--                            { attrName = "ID", nodeName = "Response",
+--                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
+-- Deprecated keys:
+-- config.xmlsec_command      the filename of xmlsec1 command.
+-- config.idp_cert_filename   the filename of IdP certificate.
+-- @return a SAML response verifier object.
 function _M.new(self, config)
     return setmetatable({
         xmlsec_command = config.xmlsec_command,
-        idp_cert_filename = config.idp_cert_filename
+        idp_cert_filename = config.idp_cert_filename,
+        idp_certificate = config.idp_certificate,
+        id_attr = config.id_attr
     }, mt)
 end
 
+--- Read and base64 decode a SAML response from the request body.
+-- @param self a SAML response veirifier.
+-- @return a decoded SAML response.
 function _M.read_and_base64decode_response(self)
     ngx.req.read_body()
     local args, err = ngx.req.get_post_args()
     if err ~= nil then
        return nil, string.format("failed to get post args to read SAML response, err=%s", err)
     end
+    -- NOTE: Long args.SAMLResponse will be truncated in nginx log without "..." suffix.
+    ngx.log(ngx.DEBUG, "args.SAMLResponse=", args.SAMLResponse)
 
     return ngx.decode_base64(args.SAMLResponse)
 end
 
+--- Verifies a SAML response with xmlsec1 command (Deprecated).
 function _M.verify_response(self, response_xml)
     local tmpfilename = os.tmpname()
     local file, err = io.open(tmpfilename, "w")
@@ -47,6 +70,10 @@ function _M.verify_response(self, response_xml)
     return true
 end
 
+--- Take attributes from a SAML response.
+-- @param self            a SAML response veirifier.
+-- @param response_xml    a SAML response (string).
+-- @return attributes (table).
 function _M.take_attributes_from_response(self, response_xml)
     local onAttributeElemStart = false
     local inAttributeElem = false
@@ -94,6 +121,10 @@ function _M.take_attributes_from_response(self, response_xml)
     return attrs
 end
 
+--- Take the request ID from a SAML response.
+-- @param self            a SAML response veirifier.
+-- @param response_xml    a SAML response (string).
+-- @return the request ID (string).
 function _M.take_request_id_from_response(self, response_xml)
     local onResponseElement = false
     local request_id = nil
@@ -116,6 +147,17 @@ function _M.take_request_id_from_response(self, response_xml)
     }
     parser:parse(response_xml, {stripWhitespace=true})
     return request_id
+end
+
+--- Verifies a simple SAML response on memory.
+-- In addition to refular verification we ensure that the signature
+-- has only one <dsig:Reference/> element.
+--
+-- @param self           a SAML response verifier.
+-- @param response_xml   response XML (string).
+-- @return err           nil if verified successfully, the error message otherwise (string).
+function _M.verify_response_memory(self, response_xml)
+    return xmlsec.verify_response(response_xml, self.idp_certificate, self.id_attr)
 end
 
 return _M

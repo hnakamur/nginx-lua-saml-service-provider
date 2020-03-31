@@ -16,30 +16,28 @@ If you want a full-fledged SAML service provider, go for [nginx-shib/nginx-http-
 * [hamishforbes/lua-ffi-zlib](https://github.com/hamishforbes/lua-ffi-zlib)
 * [Phrogz/SLAXML: SAX-like streaming XML parser for Lua](https://github.com/Phrogz/SLAXML)
 * [hnakamur/nginx-lua-session](https://github.com/hnakamur/nginx-lua-session)
-* `xmlsec1` command with OpenSSL support in [XML Security Library](https://www.aleksey.com/xmlsec/)
+* `libxmlsec` with OpenSSL support in [XML Security Library](https://www.aleksey.com/xmlsec/)
 
-On CentOS7, you can install `xmlsec1` command with OpenSSL support with the following command:
+On Ubuntu, you can install `libxmlsec1` and `libxmlsec1-openssl` with the following command.
 
 ```
-sudo yum install xmlsec1 xmlsec1-openssl
+sudo apt-get install libxmlsec1 libxmlsec1-openssl
 ```
 
+Then, you need to create symbolic links for shared libraries like:
 
-## Caveats
+```
+ln -s $(readlink /lib/x86_64-linux-gnu/libz.so.1) /lib/x86_64-linux-gnu/libz.so
+ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxml2.so.2) /usr/lib/x86_64-linux-gnu/libxml2.so
+ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1.so
+ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so
+ln -s /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libssl.so
+```
 
-Generally speaking you should avoid blocking I/O in programs with [openresty/lua-nginx-module](https://github.com/openresty/lua-nginx-module).
-However, this library contains blocking I/O when a user finished logging in:
+## Test
 
-* Save a SAML response to a temporary file using Lua's `os.tmpname`, `io.open`, and `io.write`.
-* Run the command `xmlsec` with Lua's `os.execute`.
+Install docker-compose and run the following script.
 
-For the latter, I found [jprjr/lua-resty-exec: Run external programs in OpenResty without spawning a shell or blocking](https://github.com/jprjr/lua-resty-exec), but I haven't tried it yet. With this, you need to manage a socket file. But I like to avoid it this time for a simpler setup.
-
-For the best performance, I would rather call functions in [XML Security Library](https://www.aleksey.com/xmlsec/) using LuaJIT FFI.
-
-In `apps/xmlsec.c`, the function `xmlSecAppVerifyFile` calls `xmlSecAppXmlDataCreate`, then `xmlSecParseFile`. If you use `xmlSecParseMemoryExt` instead, you don't need to save the SAML response to a temporary file. However a lot of efforts for this implementation, and I choose not to do this now.
-
-Reading the ID provider's certificate will still remain as a blocking I/O with the above FFI calls.
-I just skimmed at xmlsec source code, so this could be wrong.
-
-However, for my use case now, the site traffic is very low, and verifying the SAML response is only needed when users finish logging in, so I don't think it is a problem using blocking I/O for saving a temporary file and running a command synchronously.
+```
+./test_files/test.sh
+```
