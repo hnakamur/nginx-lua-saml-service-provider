@@ -4,7 +4,6 @@ local ffi = require("ffi")
 local ffi_new = ffi.new
 local ffi_str = ffi.string
 local C = ffi.C
-local ssl = ffi.load("ssl")
 
 ffi.cdef[[
 int RAND_bytes(unsigned char *buf, int num);
@@ -14,7 +13,7 @@ local _M = {}
 
 function _M.bytes(len)
     local buf = ffi_new("char[?]", len)
-    if ssl.RAND_bytes(buf, len) == 0 then
+    if C.RAND_bytes(buf, len) == 0 then
         return nil
     end
 
