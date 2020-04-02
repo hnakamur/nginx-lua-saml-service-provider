@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 sp_base_url=https://sp
 resolves=""
 
@@ -16,13 +16,20 @@ if [ -n "$curl_verbose_opt" ]; then
 fi
 my_curl="curl -sSk $curl_verbose_opt -b $cookie_jar -c $cookie_jar $resolves"
 
+urldecode() {
+  # NOTE: needs bash for -e option
+  echo -e "$(sed 's/+/ /g;s/%\(..\)/\\x\1/g')"
+}
+
 login() {
     url=$1
 
-    saml_response=$($my_curl -L $url)
-    saml_response_base64=$(echo "$saml_response" | base64 | tr -d '\n')
+    post_args=$($my_curl -L $url)
+    saml_response=$(echo "$post_args" | sed -e 's/SAMLResponse=\(.*\)&.*/\1/' | urldecode | base64 -d)
+    #echo "saml_response=$saml_response"
     sp_finish_login_url=$(echo "$saml_response" | sed -E -n '/^<samlp:Response/s/.* Destination="([^"]*)".*/\1/p')
-    $my_curl -L --data-urlencode "SAMLResponse=$saml_response_base64" $resolves $sp_finish_login_url
+    #echo "sp_finish_login_url=$sp_finish_login_url"
+    $my_curl -L --data-raw "$post_args" $resolves $sp_finish_login_url
 }
 
 login $sp_base_url

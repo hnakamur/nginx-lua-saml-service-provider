@@ -34,16 +34,20 @@ end
 --- Read and base64 decode a SAML response from the request body.
 -- @param self a SAML response veirifier.
 -- @return a decoded SAML response.
+-- @return RelayState parameter.
+-- @return err.
 function _M.read_and_base64decode_response(self)
     ngx.req.read_body()
     local args, err = ngx.req.get_post_args()
     if err ~= nil then
-       return nil, string.format("failed to get post args to read SAML response, err=%s", err)
+       return nil, nil, string.format("failed to get post args to read SAML response, err=%s", err)
     end
     -- NOTE: Long args.SAMLResponse will be truncated in nginx log without "..." suffix.
     ngx.log(ngx.DEBUG, "args.SAMLResponse=", args.SAMLResponse)
+    -- NOTE: Long args.RelayState will be truncated in nginx log without "..." suffix.
+    ngx.log(ngx.DEBUG, "args.RelayState=", args.RelayState)
 
-    return ngx.decode_base64(args.SAMLResponse)
+    return ngx.decode_base64(args.SAMLResponse), args.RelayState
 end
 
 --- Verifies a SAML response with xmlsec1 command (Deprecated).

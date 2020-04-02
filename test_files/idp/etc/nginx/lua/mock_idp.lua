@@ -16,6 +16,7 @@ if saml_req == nil then
     return
 end
 -- ngx.say("Welcome to /mock-idp, SAMLRequest=" .. saml_req)
+local relay_state = args.RelayState
 
 local params = idp.take_parameters_from_request(saml_req)
 params.audience = "https://sp.example.com/sso"
@@ -45,4 +46,4 @@ if err ~= nil then
     return
 end
 
-ngx.say(signed_res)
+ngx.say(ngx.encode_args({SAMLResponse=ngx.encode_base64(signed_res), RelayState=relay_state}))

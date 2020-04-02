@@ -49,13 +49,17 @@ function _M.access(self)
     return true
 end
 
+local function has_prefix(s, prefix)
+    return #s >= #prefix and string.sub(s, 1, #prefix) == prefix
+end
+
 function _M.finish_login(self)
     local sp_resp = self:response()
 
-    local response_xml = sp_resp:read_and_base64decode_response()
-    if response_xml == nil then
+    local response_xml, redirect_uri, err = sp_resp:read_and_base64decode_response()
+    if err ~= nil then
         return false,
-            string.format("failed to read and decode response during finish_login")
+            string.format("failed to read and decode response during finish_login: %s", err)
     end
 
     if self.config.response.idp_certificate ~= nil then
@@ -99,24 +103,10 @@ function _M.finish_login(self)
             string.format("failed to set session cookie during finish_login, err=%s", err)
     end
 
-    local dict_name = self.config.request.urls_before_login.dict_name
-    local redirect_urls_dict = dict_name ~= nil and ngx.shared[dict_name] or nil
-    if redirect_urls_dict ~= nil then
-        local request_id, err = sp_resp:take_request_id_from_response(response_xml)
-        if err ~= nil then
-            return false,
-                string.format("failed to take request ID from response during finish_login, err=%s", err)
-        end
-        ngx.log(ngx.INFO, "saml_request_id=", request_id)
-
-        local redirect_url = redirect_urls_dict:get(request_id)
-        ngx.log(ngx.INFO, "saml_redirect_url=", redirect_url)
-        if redirect_url ~= nil then
-            redirect_urls_dict:delete(request_id)
-            return ngx.redirect(redirect_url)
-        end
+    if not has_prefix(redirect_uri, '/') then
+        redirect_uri = '/'
     end
-    return ngx.redirect(self.config.redirect.url_after_login)
+    return ngx.redirect(redirect_uri)
 end
 
 function _M.logout(self)
@@ -153,7 +143,6 @@ function _M.request(self)
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
         sp_saml_finish_url = config.sp_saml_finish_url,
-        urls_before_login = config.urls_before_login,
         request_id_generator = function()
             return "_" .. random.hex(config.request_id_byte_length or 16)
         end
