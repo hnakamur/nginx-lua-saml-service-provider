@@ -20,27 +20,27 @@ return {
             nsHref = "urn:oasis:names:tc:SAML:2.0:protocol"
         }
     },
-    session = {
-        cookie = {
-            name = "sso_session_id",
-            path = "/",
-            secure = true
-        },
-        store = {
-            dict_name = "sso_sessions"
-        }
-    }
 --    session = {
 --        cookie = {
---            name = "sso_access_token",
+--            name = "sso_session_id",
 --            path = "/",
 --            secure = true
 --        },
 --        store = {
---            jwt = {
---                symmetric_key = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
---                algorithm = 'HS256'
---            }
+--            dict_name = "sso_sessions"
 --        }
 --    }
+    session = {
+        cookie = {
+            name = "sso_access_token",
+            path = "/",
+            secure = true
+        },
+        store = {
+            jwt = {
+                symmetric_key = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
+                algorithm = 'HS256'
+            }
+        }
+    }
 }
