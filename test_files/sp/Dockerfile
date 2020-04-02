@@ -21,6 +21,9 @@ RUN apt-get install -y git \
  && git clone https://github.com/hnakamur/nginx-lua-session \
  && cp -pr nginx-lua-session/lib/session /usr/lib/nginx/lua/
 
+# lua-cjson needed by github.com/cdbattags/lua-resty-jwt
+RUN apt-get install -y lua-cjson
+
 COPY lib/ /usr/lib/nginx/lua/
 COPY test_files/sp/etc/nginx/conf.d /etc/nginx/conf.d/
 COPY test_files/sp/etc/nginx/lua /etc/nginx/lua/

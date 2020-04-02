@@ -5,6 +5,7 @@ local session_store = require "session.store"
 local saml_sp_request = require "saml.service_provider.request"
 local saml_sp_response = require "saml.service_provider.response"
 local random = require "saml.service_provider.random"
+local jwt_store = require "saml.service_provider.jwt_store"
 
 local setmetatable = setmetatable
 
@@ -18,26 +19,46 @@ function _M.new(self, config)
     }, mt)
 end
 
+function _M.session_store_type(self)
+    if self.config.session.store.jwt ~= nil then
+        return "jwt"
+    end
+    return "shared_dict"
+end
+
 function _M.access(self)
     local session_cookie = self:session_cookie()
-    local session_id, err = session_cookie:get()
+    local session_id_or_jwt, err = session_cookie:get()
     if err ~= nil then
         return false,
             string.format("failed to get session cookie during access, err=%s", err)
     end
 
+    local key_attr_name = self.config.key_attribute_name
     local key_attr = nil
-    if session_id ~= nil then
-        local ss = self:session_store()
-        key_attr = ss:get(session_id)
+    if session_id_or_jwt ~= nil then
+        if self:session_store_type() == "jwt" then
+            ngx.log(ngx.WARN, 'service_provider:access before verify jwt, jwt=', session_id_or_jwt)
+            local verified_jwt = jwt_store.verify(self.config.session.store.jwt, session_id_or_jwt)
+            local cjson = require 'cjson.safe'
+            ngx.log(ngx.WARN, 'service_provider:access after verify jwt, verified_jwt=', cjson.encode(verified_jwt))
+            if not verified_jwt.verified then
+                return false,
+                    string.format("failed to verify jwt, err=%s", err)
+            end
+            key_attr = verified_jwt.payload[key_attr_name]
+            ngx.log(ngx.WARN, 'service_provider:access mail in verified jwt=', key_attr)
+        else
+            local ss = self:session_store()
+            key_attr = ss:get(session_id_or_jwt)
+        end
     end
 
-    if session_id == nil or key_attr == nil then
+    if session_id_or_jwt == nil or key_attr == nil then
         local sp_req = self:request()
         return sp_req:redirect_to_idp_to_login()
     end
 
-    local key_attr_name = self.config.key_attribute_name
     ngx.req.set_header(key_attr_name, key_attr)
     return true
 end
@@ -55,6 +76,8 @@ function _M.finish_login(self)
     local sp_resp = self:response()
 
     local response_xml, redirect_uri, err = sp_resp:read_and_base64decode_response()
+    ngx.log(ngx.WARN, 'finish_login response_xml=', response_xml)
+    ngx.log(ngx.WARN, 'finish_login redirect_uri=', redirect_uri)
     if err ~= nil then
         return false,
             string.format("failed to read and decode response during finish_login: %s", err)
@@ -66,6 +89,7 @@ function _M.finish_login(self)
             return false,
                 string.format("failed to verify response on memory during finish_login, err=%s", err)
         end
+        ngx.log(ngx.WARN, 'finish_login verify_response_memory result, err=', err)
     else
         local ok, err = sp_resp:verify_response(response_xml)
         if err ~= nil then
@@ -90,17 +114,28 @@ function _M.finish_login(self)
     local exptime_str = sp_resp:take_session_expiration_time_from_response(response_xml)
     local exptime = parse_iso8601_utc_time(exptime_str)
     local duration = exptime - ngx.time()
-    ngx.log(ngx.DEBUG, "exptime=", exptime, ", duration=", duration)
+    ngx.log(ngx.WARN, "exptime=", exptime, ", duration=", duration)
 
-    local ss = self:session_store()
-    local session_id, err = ss:add(key_attr, duration)
-    if err ~= nil then
-        return false,
-            string.format("failed to create session dict entry during finish_login, err=%s", err)
+    local session_id_or_jwt
+    if self:session_store_type() == "jwt" then
+        local payload = {
+            [key_attr_name] = key_attr,
+            exp = exptime,
+        }
+        session_id_or_jwt = jwt_store.sign(self.config.session.store.jwt, payload)
+    else
+        local ss = self:session_store()
+        local err
+        session_id_or_jwt, err = ss:add(key_attr, duration)
+        if err ~= nil then
+            return false,
+                string.format("failed to create session dict entry during finish_login, err=%s", err)
+        end
+        ngx.log(ngx.WARN, "session_id=", session_id)
     end
 
     local sc = self:session_cookie()
-    local ok, err = sc:set(session_id)
+    local ok, err = sc:set(session_id_or_jwt)
     if err ~= nil then
         return false,
             string.format("failed to set session cookie during finish_login, err=%s", err)
@@ -114,15 +149,19 @@ end
 
 function _M.logout(self)
     local sc = self:session_cookie()
-    local session_id, err = sc:get()
+    local session_id_or_jwt, err = sc:get()
     if err ~= nil then
         return false,
             string.format("failed to get session cookie during logout, err=%s", err)
     end
 
-    if session_id ~= nil then
-        local ss = self:session_store()
-        ss:delete(session_id)
+    if session_id_or_jwt ~= nil then
+        if self:session_store_type() == "jwt" then
+            -- nothing to do here since service provider is stateless for JWT.
+        else
+            local ss = self:session_store()
+            ss:delete(session_id_or_jwt)
+        end
     end
 
     local ok, err = sc:delete()
@@ -191,7 +230,7 @@ function _M.session_store(self)
     store = session_store:new{
         dict_name = config.dict_name,
         id_generator = function()
-            return random.hex(config.request_id_byte_length or 16)
+            return random.hex(config.session_id_byte_length or 16)
         end
     }
     self._session_store = store

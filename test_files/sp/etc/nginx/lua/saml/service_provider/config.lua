@@ -30,4 +30,17 @@ return {
             dict_name = "sso_sessions"
         }
     }
+--    session = {
+--        cookie = {
+--            name = "sso_access_token",
+--            path = "/",
+--            secure = true
+--        },
+--        store = {
+--            jwt = {
+--                symmetric_key = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
+--                algorithm = 'HS256'
+--            }
+--        }
+--    }
 }
