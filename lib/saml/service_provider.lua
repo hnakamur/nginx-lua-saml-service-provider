@@ -42,12 +42,10 @@ function _M.access(self)
             local verified_jwt = jwt_store.verify(self.config.session.store.jwt, session_id_or_jwt)
             local cjson = require 'cjson.safe'
             ngx.log(ngx.WARN, 'service_provider:access after verify jwt, verified_jwt=', cjson.encode(verified_jwt))
-            if not verified_jwt.verified then
-                return false,
-                    string.format("failed to verify jwt, err=%s", err)
+            if verified_jwt.verified then
+                key_attr = verified_jwt.payload[key_attr_name]
+                ngx.log(ngx.WARN, 'service_provider:access mail in verified jwt=', key_attr)
             end
-            key_attr = verified_jwt.payload[key_attr_name]
-            ngx.log(ngx.WARN, 'service_provider:access mail in verified jwt=', key_attr)
         else
             local ss = self:session_store()
             key_attr = ss:get(session_id_or_jwt)
@@ -150,6 +148,7 @@ end
 function _M.logout(self)
     local sc = self:session_cookie()
     local session_id_or_jwt, err = sc:get()
+    ngx.log(ngx.WARN, 'session_id_or_jwt=', session_id_or_jwt, ', err=', err)
     if err ~= nil then
         return false,
             string.format("failed to get session cookie during logout, err=%s", err)
@@ -157,17 +156,24 @@ function _M.logout(self)
 
     if session_id_or_jwt ~= nil then
         if self:session_store_type() == "jwt" then
-            -- nothing to do here since service provider is stateless for JWT.
+            -- In ideal, nothing to do here since service provider is stateless for JWT.
+            -- In reality, curl still sends the cookie after receiving the Unix epoch date
+            -- with set-cookie, so we have to change the cookie value instead of deleting it.
+            local ok, err = sc:set("")
+            if err ~= nil then
+                return false,
+                    string.format("failed to set session cookie during finish_login, err=%s", err)
+            end
         else
             local ss = self:session_store()
             ss:delete(session_id_or_jwt)
-        end
-    end
 
-    local ok, err = sc:delete()
-    if err ~= nil then
-        return false,
-            string.format("failed to delete session cookie during logout, err=%s", err)
+            local ok, err = sc:delete()
+            if err ~= nil then
+                return false,
+                    string.format("failed to delete session cookie during logout, err=%s", err)
+            end
+        end
     end
 
     return ngx.redirect(self.config.redirect.url_after_logout)
