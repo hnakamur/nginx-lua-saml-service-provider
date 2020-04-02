@@ -16,6 +16,11 @@ RUN apt-get update \
  && ln -s /dev/stdout /var/log/nginx/access.log \
  && ln -s /dev/stderr /var/log/nginx/error.log
 
+RUN apt-get install -y git \
+ && cd /tmp \
+ && git clone https://github.com/hnakamur/nginx-lua-session \
+ && cp -pr nginx-lua-session/lib/session /usr/lib/nginx/lua/
+
 COPY lib/ /usr/lib/nginx/lua/
 COPY test_files/sp/etc/nginx/conf.d /etc/nginx/conf.d/
 COPY test_files/sp/etc/nginx/lua /etc/nginx/lua/

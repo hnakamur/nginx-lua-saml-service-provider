@@ -30,13 +30,6 @@ function _M.access(self)
     if session_id ~= nil then
         local ss = self:session_store()
         key_attr = ss:get(session_id)
-        if key_attr ~= nil and ss.expire_seconds ~= 0 then
-            local ok, err = ss:extend(session_id)
-            if err ~= nil then
-                return false,
-                    string.format("failed to extend session during access, err=%s", err)
-            end
-        end
     end
 
     if session_id == nil or key_attr == nil then
@@ -51,6 +44,11 @@ end
 
 local function has_prefix(s, prefix)
     return #s >= #prefix and string.sub(s, 1, #prefix) == prefix
+end
+
+local function parse_iso8601_utc_time(str)
+    local year, month, day, hour, min, sec = str:match('(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)')
+    return os.time{year=year, month=month, day=day, hour=hour, min=min, sec=sec}
 end
 
 function _M.finish_login(self)
@@ -89,8 +87,13 @@ function _M.finish_login(self)
             string.format('failed to get key attribute "%s" from response during finish_login, err=%s', key_attr_name, err)
     end
 
+    local exptime_str = sp_resp:take_session_expiration_time_from_response(response_xml)
+    local exptime = parse_iso8601_utc_time(exptime_str)
+    local duration = exptime - ngx.time()
+    ngx.log(ngx.DEBUG, "exptime=", exptime, ", duration=", duration)
+
     local ss = self:session_store()
-    local session_id, err = ss:add(key_attr)
+    local session_id, err = ss:add(key_attr, duration)
     if err ~= nil then
         return false,
             string.format("failed to create session dict entry during finish_login, err=%s", err)

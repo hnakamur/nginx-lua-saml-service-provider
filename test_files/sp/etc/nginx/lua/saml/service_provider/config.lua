@@ -27,8 +27,7 @@ return {
             secure = true
         },
         store = {
-            dict_name = "sso_sessions",
-            expire_seconds = 600
+            dict_name = "sso_sessions"
         }
     }
 }

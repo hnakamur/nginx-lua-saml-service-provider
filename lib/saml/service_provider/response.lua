@@ -153,6 +153,30 @@ function _M.take_request_id_from_response(self, response_xml)
     return request_id
 end
 
+--- Take the session expiration time from a SAML response.
+-- @param self            a SAML response veirifier.
+-- @param response_xml    a SAML response (string).
+-- @return the session expiration time (string).
+function _M.take_session_expiration_time_from_response(self, response_xml)
+    local onAuthnStatementElement = false
+    local exptime = nil
+
+    local handleStartElement = function(name, nsURI, nsPrefix)
+        onAuthnStatementElement = (nsPrefix == "saml" and name == "AuthnStatement")
+    end
+    local handleAttribute = function(name, value, nsURI, nsPrefix)
+        if onAuthnStatementElement and name == "SessionNotOnOrAfter" then
+            exptime = value
+        end
+    end
+    local parser = slaxml:parser{
+        startElement = handleStartElement,
+        attribute = handleAttribute
+    }
+    parser:parse(response_xml, {stripWhitespace=true})
+    return exptime
+end
+
 --- Verifies a simple SAML response on memory.
 -- In addition to refular verification we ensure that the signature
 -- has only one <dsig:Reference/> element.
