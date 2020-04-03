@@ -1,5 +1,5 @@
 Welcome to /, mail=john.doe@example.com
 Welcome to /foo, mail=john.doe@example.com
 Welcome to /bar, mail=john.doe@example.com
-logout finished, mail=nil, cookie=nil
+logout finished, mail=nil
 Welcome to /foo, mail=john.doe@example.com

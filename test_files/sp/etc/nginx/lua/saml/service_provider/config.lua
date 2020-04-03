@@ -38,7 +38,7 @@ return {
         },
         store = {
             jwt = {
-                symmetric_key = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
+                symmetric_key = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T', -- random secret key
                 algorithm = 'HS256'
             }
         }
