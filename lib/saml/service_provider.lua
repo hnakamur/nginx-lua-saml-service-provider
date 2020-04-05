@@ -6,6 +6,7 @@ local saml_sp_response = require "saml.service_provider.response"
 local random = require "saml.service_provider.random"
 local jwt_store = require "saml.service_provider.jwt_store"
 local shdict_store = require "saml.service_provider.shdict_store"
+local api_error = require "saml.service_provider.api_error"
 
 local setmetatable = setmetatable
 
@@ -23,8 +24,10 @@ function _M.access(self)
     local session_cookie = self:session_cookie()
     local session_id_or_jwt, err = session_cookie:get()
     if err ~= nil then
-        return false,
-            string.format("failed to get session cookie during access, err=%s", err)
+        return api_error.new{
+            err_code = 'err_session_cookie_get',
+            log_detail = string.format('access, err=%s', err)
+        }
     end
 
     local key_attr_name = self.config.key_attribute_name
@@ -33,8 +36,10 @@ function _M.access(self)
         local ts = self:token_store()
         key_attr, err = ts:retrieve(session_id_or_jwt)
         if err ~= nil then
-            return false,
-                string.format("failed to retrieve attribute value from session, err=%s", err)
+            return api_error.new{
+                err_code = 'err_token_store_retrieve',
+                log_detail = string.format('access, err=%s', err)
+            }
         end
     end
 
@@ -44,7 +49,7 @@ function _M.access(self)
     end
 
     ngx.req.set_header(key_attr_name, key_attr)
-    return true
+    return nil
 end
 
 local function has_prefix(s, prefix)
@@ -60,57 +65,75 @@ function _M.finish_login(self)
     local sp_resp = self:response()
 
     local response_xml, redirect_uri, err = sp_resp:read_and_base64decode_response()
-    ngx.log(ngx.DEBUG, 'finish_login response_xml=', response_xml)
-    ngx.log(ngx.DEBUG, 'finish_login redirect_uri=', redirect_uri)
     if err ~= nil then
-        return false,
-            string.format("failed to read and decode response during finish_login: %s", err)
+        return api_error.new{
+            err_code = 'err_decode_saml_response',
+            status_code = ngx.HTTP_BAD_REQUEST,
+            log_detail = string.format('finish_login, err=%s', err)
+        }
     end
 
     if self.config.response.idp_certificate ~= nil then
-        local err = sp_resp:verify_response_memory(response_xml)
+        local ok, err = sp_resp:verify_response_memory(response_xml)
         if err ~= nil then
-            return false,
-                string.format("failed to verify response on memory during finish_login, err=%s", err)
+            return api_error.new{
+                err_code = 'err_verify_resp_mem',
+                log_detail = string.format('finish_login, err=%s', err)
+            }
         end
-        ngx.log(ngx.DEBUG, 'finish_login verify_response_memory result, err=', err)
+        if not ok then
+            return api_error.new{
+                err_code = 'err_verify_failed',
+                status_code = ngx.HTTP_FORBIDDEN,
+                log_detail = 'finish_login'
+            }
+        end
     else
         local ok, err = sp_resp:verify_response(response_xml)
         if err ~= nil then
-            return false,
-                string.format("failed to verify response during finish_login, err=%s", err)
+            return api_error.new{
+                err_code = 'err_verify_resp_cmd',
+                log_detail = string.format('finish_login, err=%s', err)
+            }
         end
     end
 
     local attrs, err = sp_resp:take_attributes_from_response(response_xml)
     if err ~= nil then
-        return false,
-            string.format("failed to take attributes from response during finish_login, err=%s", err)
+        return api_error.new{
+            err_code = 'err_take_attrs_from_resp',
+            log_detail = 'finish_login'
+        }
     end
 
     local key_attr_name = self.config.key_attribute_name
     local key_attr = attrs[key_attr_name]
     if key_attr == nil then
-        return false,
-            string.format('failed to get key attribute "%s" from response during finish_login, err=%s', key_attr_name, err)
+        return api_error.new{
+            err_code = 'err_attr_not_found',
+            log_detail = 'finish_login'
+        }
     end
 
     local exptime_str = sp_resp:take_session_expiration_time_from_response(response_xml)
     local exptime = parse_iso8601_utc_time(exptime_str)
-    ngx.log(ngx.DEBUG, "exptime=", exptime)
 
     local ts = self:token_store()
     local session_id_or_jwt, err = ts:store(key_attr, exptime)
     if err ~= nil then
-        return false,
-            string.format("failed to store attribute, err=%s", err)
+        return api_error.new{
+            err_code = 'err_token_store_store',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
     end
 
     local sc = self:session_cookie()
     local ok, err = sc:set(session_id_or_jwt)
     if err ~= nil then
-        return false,
-            string.format("failed to set session cookie during finish_login, err=%s", err)
+        return api_error.new{
+            err_code = 'err_session_cookie_set_empty',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
     end
 
     if not has_prefix(redirect_uri, '/') then
@@ -122,10 +145,11 @@ end
 function _M.logout(self)
     local sc = self:session_cookie()
     local session_id_or_jwt, err = sc:get()
-    ngx.log(ngx.DEBUG, 'session_id_or_jwt=', session_id_or_jwt, ', err=', err)
     if err ~= nil then
-        return false,
-            string.format("failed to get session cookie during logout, err=%s", err)
+        return api_error.new{
+            err_code = 'err_session_cookie_get',
+            log_detail = string.format('logout, err=%s', err)
+        }
     end
 
     if session_id_or_jwt ~= nil then
@@ -137,8 +161,10 @@ function _M.logout(self)
         -- with set-cookie, so we have to change the cookie value instead of deleting it.
         local ok, err = sc:set("")
         if err ~= nil then
-            return false,
-                string.format("failed to set cookie to empty value, err=%s", err)
+            return api_error.new{
+                err_code = 'err_session_cookie_set_empty',
+                log_detail = string.format('logout, err=%s', err)
+            }
         end
     end
 

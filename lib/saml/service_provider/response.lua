@@ -183,7 +183,8 @@ end
 --
 -- @param self           a SAML response verifier.
 -- @param response_xml   response XML (string).
--- @return err           nil if verified successfully, the error message otherwise (string).
+-- @return ok            verified successfully or not (bool).
+-- @return err           the error message (string or nil).
 function _M.verify_response_memory(self, response_xml)
     return xmlsec.verify_response(response_xml, self.idp_certificate, self.id_attr)
 end
