@@ -43,4 +43,4 @@ COPY tests/ /usr/local/ngx-lua-saml-sp-test/
 COPY lib/ /usr/lib/nginx/lua/
 
 WORKDIR /usr/local/ngx-lua-saml-sp-test/
-CMD ["./docker-entry.sh"]
+ENTRYPOINT ["./docker-entry.sh"]

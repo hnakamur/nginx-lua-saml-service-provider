@@ -47,7 +47,16 @@ function _M.read_and_base64decode_response(self)
     -- NOTE: Long args.RelayState will be truncated in nginx log without "..." suffix.
     ngx.log(ngx.DEBUG, "args.RelayState=", args.RelayState)
 
-    return ngx.decode_base64(args.SAMLResponse), args.RelayState
+    local saml_resp = ""
+    -- NOTE: We guard here to avoid error called in ngx.decode_base64.
+    if type(args.SAMLResponse) == 'string' then
+        saml_resp = ngx.decode_base64(args.SAMLResponse)
+    end
+    if saml_resp == "" or args.RelayState == nil then
+       return nil, nil, "invalid SAMLResponse or RelayState"
+    end
+    ngx.log(ngx.DEBUG, "saml_resp=", saml_resp)
+    return saml_resp, args.RelayState
 end
 
 --- Verifies a SAML response with xmlsec1 command (Deprecated).

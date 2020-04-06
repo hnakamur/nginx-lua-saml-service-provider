@@ -67,8 +67,8 @@ function _M.finish_login(self)
     local response_xml, redirect_uri, err = sp_resp:read_and_base64decode_response()
     if err ~= nil then
         return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
             err_code = 'err_decode_saml_response',
-            status_code = ngx.HTTP_BAD_REQUEST,
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
@@ -77,14 +77,15 @@ function _M.finish_login(self)
         local ok, err = sp_resp:verify_response_memory(response_xml)
         if err ~= nil then
             return api_error.new{
+                status_code = ngx.HTTP_FORBIDDEN,
                 err_code = 'err_verify_resp_mem',
                 log_detail = string.format('finish_login, err=%s', err)
             }
         end
         if not ok then
             return api_error.new{
-                err_code = 'err_verify_failed',
                 status_code = ngx.HTTP_FORBIDDEN,
+                err_code = 'err_verify_failed',
                 log_detail = 'finish_login'
             }
         end
@@ -92,6 +93,7 @@ function _M.finish_login(self)
         local ok, err = sp_resp:verify_response(response_xml)
         if err ~= nil then
             return api_error.new{
+                status_code = ngx.HTTP_FORBIDDEN,
                 err_code = 'err_verify_resp_cmd',
                 log_detail = string.format('finish_login, err=%s', err)
             }
@@ -101,6 +103,7 @@ function _M.finish_login(self)
     local attrs, err = sp_resp:take_attributes_from_response(response_xml)
     if err ~= nil then
         return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
             err_code = 'err_take_attrs_from_resp',
             log_detail = 'finish_login'
         }
@@ -110,6 +113,7 @@ function _M.finish_login(self)
     local key_attr = attrs[key_attr_name]
     if key_attr == nil then
         return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
             err_code = 'err_attr_not_found',
             log_detail = 'finish_login'
         }
@@ -122,6 +126,7 @@ function _M.finish_login(self)
     local session_id_or_jwt, err = ts:store(key_attr, exptime)
     if err ~= nil then
         return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
             err_code = 'err_token_store_store',
             log_detail = string.format('finish_login, err=%s', err)
         }
@@ -131,6 +136,7 @@ function _M.finish_login(self)
     local ok, err = sc:set(session_id_or_jwt)
     if err ~= nil then
         return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
             err_code = 'err_session_cookie_set_empty',
             log_detail = string.format('finish_login, err=%s', err)
         }

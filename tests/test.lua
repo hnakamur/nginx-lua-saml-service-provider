@@ -147,4 +147,31 @@ function TestServiceProvider:testURLAfterLoginSuccess()
         'response#4 body')
 end
 
+function TestServiceProvider:testFinishLoginBadBody()
+    local http_client = require('http.client')
+
+    local c = http_client.new()
+    c:set_request_default_opts{
+        ssl_verifypeer = false,
+        ssl_verifyhost = false,
+    }
+
+    local cases = {
+        { body = '' },
+        { body = 'SAMLResponse=&RelayState=/' },
+        { body = 'SAMLResponse=foo&RelayState=/' },
+    }
+    for i, tc in ipairs(cases) do
+        local resp, err, errcode = c:send_request(
+            c:new_request{
+                method = 'POST',
+                url = 'https://sp.example.com/sso/finish-login',
+                body = tc.body
+            }
+        )
+        lu.assertIsNil(err, string.format('case %d: err', i))
+        lu.assertEquals(resp.status_code, 403, string.format('case %d: status_code', i))
+    end
+end
+
 os.exit(lu.LuaUnit.run())
