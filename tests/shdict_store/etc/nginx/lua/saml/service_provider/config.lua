@@ -16,12 +16,15 @@ return {
     },
     session = {
         cookie = {
-            name = "sso_session_id",
+            name = "sso_access_token",
             path = "/",
             secure = true
         },
         store = {
-            dict_name = "sso_sessions"
+            shared_dict_name = "sso_sessions",
+            request_id_expire_seconds = 300,
+            request_id_prefix = "_",
+            request_id_random_byte_len = 16
         }
     }
 }

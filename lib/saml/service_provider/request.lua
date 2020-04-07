@@ -11,29 +11,17 @@ function _M.new(self, config)
     return setmetatable({
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
-        sp_saml_finish_url = config.sp_saml_finish_url,
-        request_id_generator = config.request_id_generator
+        sp_saml_finish_url = config.sp_saml_finish_url
     }, mt)
 end
 
-function _M.redirect_to_idp_to_login(self)
-    local request_id, err = self:issue_request_id()
-    if err ~= nil then
-        return nil, err
-    end
-
+function _M.redirect_to_idp_to_login(self, request_id)
     local req, err = self:create_compress_base64encode_request(request_id)
     if err ~= nil then
         return nil, err
     end
-    local url_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
-    local url = self.idp_dest_url .. "?" .. ngx.encode_args({SAMLRequest = req, RelayState = url_before_login})
+    local url = self.idp_dest_url .. "?" .. ngx.encode_args{SAMLRequest = req}
     return ngx.redirect(url)
-end
-
-function _M.issue_request_id(self)
-    local request_id_generator = self.request_id_generator
-    return request_id_generator()
 end
 
 function _M.create_compress_base64encode_request(self, request_id)

@@ -27,7 +27,6 @@ function TestServiceProvider:testLoginSuccess()
         'response#1 redirect_url prefix')
     local u = net_url.parse(redirect_url)
     lu.assertIsString(u.query['SAMLRequest'], 'response#1 redirect_url query has SAMLRequest parameter')
-    lu.assertIsString(u.query['RelayState'], 'response#1 redirect_url query has RelayState parameter')
 
     -- Follow redirect
     resp, err, errcode = c:send_request(
@@ -90,7 +89,6 @@ function TestServiceProvider:testLoginSuccess()
         'response#7 redirect_url prefix')
     local u = net_url.parse(redirect_url)
     lu.assertIsString(u.query['SAMLRequest'], 'response#7 redirect_url query has SAMLRequest parameter')
-    lu.assertIsString(u.query['RelayState'], 'response#7 redirect_url query has RelayState parameter')
 
     c:free()
 end
@@ -225,8 +223,8 @@ function TestServiceProvider:testFinishLoginBadBody()
 
     local cases = {
         { body = '' },
-        { body = 'SAMLResponse=&RelayState=/' },
-        { body = 'SAMLResponse=foo&RelayState=/' },
+        { body = 'SAMLResponse=' },
+        { body = 'SAMLResponse=foo' },
     }
     for i, tc in ipairs(cases) do
         local resp, err, errcode = c:send_request(

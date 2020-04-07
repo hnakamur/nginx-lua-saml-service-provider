@@ -34,29 +34,26 @@ end
 --- Read and base64 decode a SAML response from the request body.
 -- @param self a SAML response veirifier.
 -- @return a decoded SAML response.
--- @return RelayState parameter.
 -- @return err.
 function _M.read_and_base64decode_response(self)
     ngx.req.read_body()
     local args, err = ngx.req.get_post_args()
     if err ~= nil then
-       return nil, nil, string.format("failed to get post args to read SAML response, err=%s", err)
+       return nil, string.format("failed to get post args to read SAML response, err=%s", err)
     end
     -- NOTE: Long args.SAMLResponse will be truncated in nginx log without "..." suffix.
     ngx.log(ngx.DEBUG, "args.SAMLResponse=", args.SAMLResponse)
-    -- NOTE: Long args.RelayState will be truncated in nginx log without "..." suffix.
-    ngx.log(ngx.DEBUG, "args.RelayState=", args.RelayState)
 
     local saml_resp = ""
     -- NOTE: We guard here to avoid error called in ngx.decode_base64.
     if type(args.SAMLResponse) == 'string' then
         saml_resp = ngx.decode_base64(args.SAMLResponse)
     end
-    if saml_resp == "" or args.RelayState == nil then
-       return nil, nil, "invalid SAMLResponse or RelayState"
+    if saml_resp == "" then
+       return nil, "invalid SAMLResponse"
     end
     ngx.log(ngx.DEBUG, "saml_resp=", saml_resp)
-    return saml_resp, args.RelayState
+    return saml_resp
 end
 
 --- Verifies a SAML response with xmlsec1 command (Deprecated).
@@ -160,6 +157,37 @@ function _M.take_request_id_from_response(self, response_xml)
     }
     parser:parse(response_xml, {stripWhitespace=true})
     return request_id
+end
+
+--- Take the request ID and the NotOnOrAfter attribute of
+-- SubjectConfirmationData from a SAML response.
+-- @param self            a SAML response veirifier.
+-- @param response_xml    a SAML response (string).
+-- @return the request ID (string).
+-- @return the NotOnOrAfter attribute (string).
+function _M.take_request_id_from_response(self, response_xml)
+    local onSubjectConfirmationDataElem = false
+    local request_id = nil
+    local not_on_or_after = nil
+
+    local handleStartElement = function(name, nsURI, nsPrefix)
+        onSubjectConfirmationDataElem = nsPrefix == "saml" and name == "SubjectConfirmationData"
+    end
+    local handleAttribute = function(name, value, nsURI, nsPrefix)
+        if onSubjectConfirmationDataElem then
+            if name == "InResponseTo" then
+                request_id = value
+            elseif name == "NotOnOrAfter" then
+                not_on_or_after = value
+            end
+        end
+    end
+    local parser = slaxml:parser{
+        startElement = handleStartElement,
+        attribute = handleAttribute
+    }
+    parser:parse(response_xml, {stripWhitespace=true})
+    return request_id, not_on_or_after
 end
 
 --- Take the session expiration time from a SAML response.

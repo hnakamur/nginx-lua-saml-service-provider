@@ -13,26 +13,6 @@ while ! timeout 1 bash -c "echo > /dev/tcp/localhost/443" 2> /dev/null; do
   sleep 1
 done
 export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;/usr/local/lbase64/?.lua;;'
-luajit test.lua
-if [ $? -ne 0 ]; then
-  echo 'shdict_store test failed!!!'
-fi
-
-kill $nginx_pid
-
-sleep 1
-
-# run tests with jwt store
-
-rsync -avz /usr/local/ngx-lua-saml-sp-test/jwt_store/etc/nginx/ /etc/nginx/
-
-nginx -g 'daemon off;' &
-nginx_pid=$!
-
-while ! timeout 1 bash -c "echo > /dev/tcp/localhost/443" 2> /dev/null; do
-  sleep 1
-done
-export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;'
 luajit test.lua "$@"
 if [ $? -eq 0 ]; then
     kill $nginx_pid
@@ -40,9 +20,36 @@ else
     tail -n 20 /var/log/nginx/error.log
     cat <<EOF
 
-jwt_store test failed!!!
+shdict_store test failed!!!
 You can check log files by running docker exec -it \$container_id bash on another terminal,
 or press Ctrl-C to stop this container.
 EOF
     wait $nginx_pid
 fi
+#
+#sleep 1
+#
+## run tests with jwt store
+#
+#rsync -avz /usr/local/ngx-lua-saml-sp-test/jwt_store/etc/nginx/ /etc/nginx/
+#
+#nginx -g 'daemon off;' &
+#nginx_pid=$!
+#
+#while ! timeout 1 bash -c "echo > /dev/tcp/localhost/443" 2> /dev/null; do
+#  sleep 1
+#done
+#export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;'
+#luajit test.lua "$@"
+#if [ $? -eq 0 ]; then
+#    kill $nginx_pid
+#else
+#    tail -n 20 /var/log/nginx/error.log
+#    cat <<EOF
+#
+#jwt_store test failed!!!
+#You can check log files by running docker exec -it \$container_id bash on another terminal,
+#or press Ctrl-C to stop this container.
+#EOF
+#    wait $nginx_pid
+#fi

@@ -4,6 +4,7 @@ local session_cookie = require "session.cookie"
 local saml_sp_request = require "saml.service_provider.request"
 local saml_sp_response = require "saml.service_provider.response"
 local random = require "saml.service_provider.random"
+local time = require "saml.service_provider.time"
 local jwt_store = require "saml.service_provider.jwt_store"
 local shdict_store = require "saml.service_provider.shdict_store"
 local api_error = require "saml.service_provider.api_error"
@@ -30,10 +31,10 @@ function _M.access(self)
         }
     end
 
+    local ts = self:token_store()
     local key_attr_name = self.config.key_attribute_name
     local key_attr = nil
     if session_id_or_jwt ~= nil then
-        local ts = self:token_store()
         key_attr, err = ts:retrieve(session_id_or_jwt)
         if err ~= nil then
             return api_error.new{
@@ -44,27 +45,33 @@ function _M.access(self)
     end
 
     if session_id_or_jwt == nil or key_attr == nil then
+        -- NOTE: uri_before_login can be long so we store it in shared dict
+        -- instead of setting it to RelayState.
+        --
+        -- Document identifier: saml-bindings-2.0-os
+        -- Location: http://docs.oasis-open.org/security/saml/v2.0/
+        -- 3.4.3 RelayState
+        -- The value MUST NOT exceed 80 bytes in length
+        local uri_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
+        local request_id, err = ts:issue_request_id(uri_before_login)
+        if err ~= nil then
+            return api_error.new{
+                err_code = 'err_issue_request_id',
+                log_detail = string.format('access, err=%s', err)
+            }
+        end
         local sp_req = self:request()
-        return sp_req:redirect_to_idp_to_login()
+        return sp_req:redirect_to_idp_to_login(request_id)
     end
 
     ngx.req.set_header(key_attr_name, key_attr)
     return nil
 end
 
-local function has_prefix(s, prefix)
-    return #s >= #prefix and string.sub(s, 1, #prefix) == prefix
-end
-
-local function parse_iso8601_utc_time(str)
-    local year, month, day, hour, min, sec = str:match('(%d+)-(%d+)-(%d+)T(%d+):(%d+):(%d+)')
-    return os.time{year=year, month=month, day=day, hour=hour, min=min, sec=sec}
-end
-
 function _M.finish_login(self)
     local sp_resp = self:response()
 
-    local response_xml, redirect_uri, err = sp_resp:read_and_base64decode_response()
+    local response_xml, err = sp_resp:read_and_base64decode_response()
     if err ~= nil then
         return api_error.new{
             status_code = ngx.HTTP_FORBIDDEN,
@@ -100,6 +107,28 @@ function _M.finish_login(self)
         end
     end
 
+    local request_id, not_on_or_after_s = sp_resp:take_request_id_from_response(response_xml)
+    local not_on_or_after, err = time.parse_iso8601_utc_time(not_on_or_after_s)
+    if err ~= nil then
+        -- Malicious date value attack.
+        return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
+            err_code = 'err_invalid_not_on_or_after',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
+    end
+    local request_exptime = not_on_or_after - ngx.time()
+    local ts = self:token_store()
+    local redirect_uri, ok, err = ts:take_uri_before_login(request_id, request_exptime)
+    ngx.log(ngx.DEBUG, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
+    if err ~= nil or not ok then
+        return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
+            err_code = 'err_take_uri_before_login',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
+    end
+
     local attrs, err = sp_resp:take_attributes_from_response(response_xml)
     if err ~= nil then
         return api_error.new{
@@ -120,9 +149,16 @@ function _M.finish_login(self)
     end
 
     local exptime_str = sp_resp:take_session_expiration_time_from_response(response_xml)
-    local exptime = parse_iso8601_utc_time(exptime_str)
+    local exptime, err = time.parse_iso8601_utc_time(exptime_str)
+    if err ~= nil then
+        -- Malicious date value attack.
+        return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
+            err_code = 'err_session_exp_time',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
+    end
 
-    local ts = self:token_store()
     local session_id_or_jwt, err = ts:store(key_attr, exptime)
     if err ~= nil then
         return api_error.new{
@@ -142,9 +178,6 @@ function _M.finish_login(self)
         }
     end
 
-    if not has_prefix(redirect_uri, '/') then
-        redirect_uri = '/'
-    end
     return ngx.redirect(redirect_uri)
 end
 
