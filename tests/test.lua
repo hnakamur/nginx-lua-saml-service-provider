@@ -91,7 +91,74 @@ function TestServiceProvider:testLoginSuccess()
     local u = net_url.parse(redirect_url)
     lu.assertIsString(u.query['SAMLRequest'], 'response#7 redirect_url query has SAMLRequest parameter')
     lu.assertIsString(u.query['RelayState'], 'response#7 redirect_url query has RelayState parameter')
+
+    c:free()
 end
+
+function TestServiceProvider:testFinishLoginReplayAttackProtection()
+    local http_client = require('http.client')
+
+    local c = http_client.new()
+    c:set_request_default_opts{
+        ssl_verifypeer = false,
+        ssl_verifyhost = false,
+    }
+
+    local c2 = http_client.new()
+    c2:set_request_default_opts{
+        ssl_verifypeer = false,
+        ssl_verifyhost = false,
+    }
+
+    local resp, err, errcode
+    -- Send first request and receive redirect
+    resp, err, errcode = c:send_request(
+        c:new_request{ url = 'https://sp.example.com/' }
+    )
+    lu.assertIsNil(err, 'response#1 err')
+    lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
+    local redirect_url = resp:redirect_url()
+
+    -- Follow redirect
+    resp, err, errcode = c:send_request(
+        c:new_request{ url = redirect_url }
+    )
+    lu.assertIsNil(err, 'response#2 err')
+    lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
+    lu.assertIsNil(resp:redirect_url(), 'response#2 redirect_url')
+
+    -- Finish login
+    local url = resp.header:get('X-Destination')
+    local body = resp.body
+    resp, err, errcode = c:send_request(
+        c:new_request{
+            method = 'POST',
+            url = url,
+            body = body,
+        }
+    )
+    lu.assertIsNil(err, 'response#3 err')
+    lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
+    redirect_url = resp:redirect_url()
+    lu.assertNotNil(redirect_url, 'response#3 redirect_url')
+
+    -- Replay attack by another client
+    resp, err, errcode = c2:send_request(
+        c:new_request{
+            method = 'POST',
+            url = url,
+            body = body,
+        }
+    )
+    lu.assertIsNil(err, 'attacker response err')
+    lu.assertEquals(resp.status_code, 403, 'attacker response status_code')
+    redirect_url = resp:redirect_url()
+    lu.assertIsNil(redirect_url, 'attacker response redirect_url')
+
+    c2:free()
+    c:free()
+end
+
 
 function TestServiceProvider:testURLAfterLoginSuccess()
     local http_client = require('http.client')
