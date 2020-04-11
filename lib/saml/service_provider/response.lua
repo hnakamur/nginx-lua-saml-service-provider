@@ -65,6 +65,7 @@ end
 -- @return ok            verified successfully or not (bool).
 -- @return err           the error message (string or nil).
 function _M.verify_response_memory(self, response_xml)
+    -- TODO: Investigate if we can suppress error to be printed to stdout or stderr
     return xmlsec.verify_response(response_xml, self.idp_certificate, self.id_attr)
 end
 
