@@ -26,7 +26,14 @@ RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
     -set_serial 2 \
     -days 365 \
     -subj "/C=JP/ST=Osaka/L=Osaka City/CN=sp.example.com" \
-    -out /etc/nginx/saml/sp.example.com.crt \
-    -keyout /etc/nginx/saml/sp.example.com.key
+    -out /etc/nginx/sp.example.com.crt \
+    -keyout /etc/nginx/sp.example.com.key
+
+RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
+    -set_serial 2 \
+    -days 365 \
+    -subj "/C=JP/ST=Osaka/L=Osaka City/CN=idp.example.com" \
+    -out /etc/nginx/idp.example.com.crt \
+    -keyout /etc/nginx/idp.example.com.key
 
 CMD ["/usr/sbin/nginx", "-g", "daemon off;"]

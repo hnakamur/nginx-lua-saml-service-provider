@@ -9,6 +9,6 @@ function readfile(filename)
 end
 
 local config = require "saml.service_provider.config"
-config.response.idp_certificate = readfile('/etc/nginx/saml/idp.example.com.crt')
+config.response.idp_certificate = readfile('/etc/nginx/idp.example.com.crt')
 
 end)()
