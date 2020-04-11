@@ -38,19 +38,19 @@ function _M.new(self, config)
     }, mt)
 end
 
-function _M.issue_request_id(self, uri_before_login)
+function _M.issue_request_id(self, uri_before_login, config)
     local dict = self.dict
-    local request_id, success, err, forcible
-    repeat
-        request_id = self.request_id_prefix .. random.hex(self.request_id_random_byte_len)
-        success, err, forcible = dict:add(request_id, uri_before_login, self.request_id_expire_seconds)
-    until success or err ~= "exists"
-    if not success then
-        return nil,
-            string.format("error to add uri_before_login, dict=%s, request_id=%s, err=%s, forcible=%s",
-                          self.dict_name, request_id, err, forcible)
+    for i = 1, config.issue_max_retry_count do
+        local request_id = config.prefix .. random.hex(config.random_byte_len)
+        local success, err, forcible = dict:add(request_id, uri_before_login,
+            config.expire_seconds)
+        if success then
+            return request_id
+        elseif err ~= "exists" then
+            return nil, string.format('issue_request_id: %s', err)
+        end
     end
-    return request_id
+    return nil, 'issue_request_id: exceeded max_retry_count'
 end
 
 function _M.take_uri_before_login(self, request_id, exptime)

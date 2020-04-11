@@ -10,8 +10,9 @@ return {
     },
     response = {
         id_attr = {
-            attrName = "ID", nodeName = "Response",
-            nsHref = "urn:oasis:names:tc:SAML:2.0:protocol"
+            attrName = "ID",
+            nsHref = "urn:oasis:names:tc:SAML:2.0:protocol",
+            nodeName = "Response"
         }
     },
     session = {
@@ -36,15 +37,18 @@ return {
             request_id = {
                 prefix = "_",
                 random_byte_len = 16,
+                issue_max_retry_count = 10,
                 expire_seconds = 5 * 60, -- 5 minutes
             },
             jwt_id = {
                 prefix = "t",
                 random_byte_len = 16,
+                issue_max_retry_count = 10,
             },
             jwt_nonce = {
                 prefix = "n",
                 random_byte_len = 16,
+                issue_max_retry_count = 10,
                 duration_after_first_use_seconds = 1,
                 usable_count = 1,
             },
