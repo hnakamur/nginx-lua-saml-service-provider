@@ -22,6 +22,10 @@ function _M.new(self, config)
     }, mt)
 end
 
+function _M.close(self)
+    -- This is no-op for shdict_store
+end
+
 function _M.issue_id(self, value, expire_seconds_func, config)
     local dict = self.dict
     -- NOTE: The time resoution for shared dict is 0.001 second.

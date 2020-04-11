@@ -26,6 +26,8 @@ return {
             redis = {
                 host = "127.0.0.1",
                 port = 6379,
+                connect_options = { -- https://github.com/openresty/lua-resty-redis#connect
+                },
                 connect_timeout_seconds = 1,
                 send_timeout_seconds = 1,
                 read_timeout_seconds = 1,
