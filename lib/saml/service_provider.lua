@@ -5,7 +5,6 @@ local saml_sp_request = require "saml.service_provider.request"
 local saml_sp_response = require "saml.service_provider.response"
 local random = require "saml.service_provider.random"
 local time = require "saml.service_provider.time"
-local jwt_store = require "saml.service_provider.jwt_store"
 local shdict_store = require "saml.service_provider.shdict_store"
 local api_error = require "saml.service_provider.api_error"
 local access_token = require "saml.service_provider.access_token"
@@ -318,26 +317,14 @@ function _M.token_store(self)
         return store
     end
 
-    local store_type = self:token_store_type()
-    if store_type == "jwt" then
-        local jwt_config = self.config.session.store.jwt
-        store = jwt_store:new{
-            key_attr_name = self.config.key_attribute_name,
-            symmetric_key = jwt_config.symmetric_key,
-            algorithm = jwt_config.algorithm
-        }
-    else
+    local store_type = self.config.session.store.store_type
+    if store_type == 'shdict' then
         store = shdict_store:new(self.config.session.store)
+    else
+        ngx.log(ngx.EMERG, 'invalid session store_type: ', store_type)
     end
     self._token_store = store
     return store
-end
-
-function _M.token_store_type(self)
-    if self.config.session.store.jwt ~= nil then
-        return "jwt"
-    end
-    return "shared_dict"
 end
 
 return _M
