@@ -53,7 +53,8 @@ function _M.access(self)
         -- 3.4.3 RelayState
         -- The value MUST NOT exceed 80 bytes in length
         local uri_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
-        local request_id, err = ts:issue_request_id(uri_before_login, self.config.session.store.request_id)
+        local cfg = self.config.session.store.request_id
+        local request_id, err = ts:issue_id(uri_before_login, cfg.expire_seconds, cfg)
         if err ~= nil then
             return api_error.new{
                 err_code = 'err_issue_request_id',
