@@ -108,6 +108,10 @@ function TestServiceProvider:testLoginSuccess()
     lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
+    print('response#3 nonce=', resp.header:get('jwt-nonce'))
+    local token = resp.header:get('set-cookie')
+    lu.assertNotNil(token, 'response#3 token')
+    print('response#3 token=', token)
 
     -- Access the site
     req = c:new_request{ url = redirect_url }
@@ -115,6 +119,14 @@ function TestServiceProvider:testLoginSuccess()
     lu.assertIsNil(err, 'response#4 err')
     lu.assertEquals(resp.status_code, 200, 'response#4 status_code')
     lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'response#4 body')
+    print('response#4 new-nonce=', resp.header:get('new-nonce'))
+    print('response#4 old-token=', resp.header:get('old-token'))
+    print('response#4 new-token=', resp.header:get('new-token'))
+    local token2 = resp.header:get('set-cookie')
+    lu.assertNotNil(token2, 'response#4 token')
+    print('response#4 token2=', token2)
+    lu.assertNotEquals(token, token2,
+        'response#4 token should be different from response#3 token')
 
     -- Logout
     req = c:new_request{ url = 'https://sp.example.com/sso/logout' }
