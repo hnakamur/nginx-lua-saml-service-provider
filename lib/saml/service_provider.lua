@@ -38,7 +38,7 @@ function _M._get_and_verify_token(self)
 end
 
 function _M.access(self)
-    local ts = self:token_store()
+    local ss = self:session_store()
 
     local allowed
     local token, err = self:_get_and_verify_token()
@@ -48,7 +48,7 @@ function _M.access(self)
         local nonce = token.payload.nonce
         local nonce_cfg = self.config.session.store.jwt_nonce
         local first_use
-        allowed, first_use, err = ts:use_nonce(nonce, nonce_cfg)
+        allowed, first_use, err = ss:use_nonce(nonce, nonce_cfg)
         if err ~= nil then
             ngx.log(ngx.ERR, err)
         end
@@ -57,7 +57,7 @@ function _M.access(self)
             local session_expire_seconds_func = function()
                 return session_expire_timestamp - ngx.now()
             end
-            local new_nonce, err = ts:issue_id(nonce_cfg.usable_count,
+            local new_nonce, err = ss:issue_id(nonce_cfg.usable_count,
                 session_expire_seconds_func, nonce_cfg)
             if err ~= nil then
                 ngx.log(ngx.ERR, err)
@@ -88,7 +88,7 @@ function _M.access(self)
         local expire_seconds_func = function()
             return cfg.expire_seconds
         end
-        local request_id, err = ts:issue_id(uri_before_login, expire_seconds_func, cfg)
+        local request_id, err = ss:issue_id(uri_before_login, expire_seconds_func, cfg)
         if err ~= nil then
             return api_error.new{
                 err_code = 'err_issue_request_id',
@@ -149,8 +149,8 @@ function _M.finish_login(self)
     end
     local req_exptime = req_expire_timestamp - ngx.now()
 
-    local ts = self:token_store()
-    local redirect_uri, ok, err = ts:take_uri_before_login(vals.request_id, req_exptime)
+    local ss = self:session_store()
+    local redirect_uri, ok, err = ss:take_uri_before_login(vals.request_id, req_exptime)
     ngx.log(ngx.WARN, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
     if err ~= nil or not ok then
         return api_error.new{
@@ -183,7 +183,7 @@ function _M.finish_login(self)
         return session_expire_timestamp - ngx.now()
     end
 
-    local jwt_id, err = ts:issue_id('', session_expire_seconds_func,
+    local jwt_id, err = ss:issue_id('', session_expire_seconds_func,
         self.config.session.store.jwt_id)
     if err ~= nil then
         return api_error.new{
@@ -194,7 +194,7 @@ function _M.finish_login(self)
     -- ngx.header.jwt_id = jwt_id
 
     local nonce_cfg = self.config.session.store.jwt_nonce
-    local nonce, err = ts:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
+    local nonce, err = ss:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
         nonce_cfg)
     if err ~= nil then
         return api_error.new{
@@ -235,7 +235,7 @@ end
 
 function _M.logout(self)
     local sc = self:session_cookie()
-    local ts = self:token_store()
+    local ss = self:session_store()
 
     local token, err = self:_get_and_verify_token()
     if err ~= nil then
@@ -250,13 +250,13 @@ function _M.logout(self)
         end
 
         local jwt_id = token.payload.jti
-        err = ts:delete_id(jwt_id)
+        err = ss:delete_id(jwt_id)
         if err ~= nil then
             ngx.log(ngx.ERR, 'logout: delete jwt_id: ', err)
         end
 
         local nonce = token.payload.nonce
-        err = ts:delete_id(nonce)
+        err = ss:delete_id(nonce)
         if err ~= nil then
             ngx.log(ngx.ERR, 'logout: delete nonce: ', err)
         end
@@ -311,8 +311,8 @@ function _M.session_cookie(self)
     return cookie
 end
 
-function _M.token_store(self)
-    local store = self._token_store
+function _M.session_store(self)
+    local store = self._session_store
     if store ~= nil then
         return store
     end
@@ -320,10 +320,12 @@ function _M.token_store(self)
     local store_type = self.config.session.store.store_type
     if store_type == 'shdict' then
         store = shdict_store:new(self.config.session.store)
+    elseif store_type == 'redis' then
+        store = redis_store:new(self.config.session.store)
     else
         ngx.log(ngx.EMERG, 'invalid session store_type: ', store_type)
     end
-    self._token_store = store
+    self._session_store = store
     return store
 end
 
