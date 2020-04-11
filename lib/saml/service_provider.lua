@@ -41,10 +41,43 @@ end
 function _M.access(self)
     local ts = self:token_store()
 
+    local allowed
     local token, err = self:_get_and_verify_token()
     if err ~= nil then
-        -- TODO: log err
+        ngx.log(ngx.ERR, err)
+    else
+        allowed = true
+        -- local nonce = token.payload.nonce
+        -- local nonce_cfg = self.config.session.store.jwt_nonce
+        -- local first_use
+        -- allowed, first_use, err = ts:use_nonce(nonce, nonce_cfg)
+        -- if err ~= nil then
+        --     ngx.log(ngx.ERR, err)
+        -- end
+        -- if first_use then
+        --     local session_expire_timestamp = token.payload.exp
+        --     local session_expire_seconds_func = function()
+        --         return session_expire_timestamp - ngx.now()
+        --     end
+        --     local new_nonce, err = ts:issue_id(nonce_cfg.usable_count,
+        --         session_expire_seconds_func, nonce_cfg)
+        --     if err ~= nil then
+        --         ngx.log(ngx.ERR, err)
+        --     end
+        --     ngx.header['new-nonce'] = new_nonce
+        --     token.payload.nonce = new_nonce
 
+        --     local sign_cfg = self.config.session.store.jwt_sign
+        --     local signed_token = token:sign(sign_cfg)
+        --     local sc = self:session_cookie()
+        --     local ok
+        --     ok, err = sc:set(signed_token)
+        --     if err ~= nil then
+        --         ngx.log(ngx.ERR, err)
+        --     end
+        -- end
+    end
+    if err ~= nil or not allowed then
         -- NOTE: uri_before_login can be long so we store it in shared dict
         -- instead of setting it to RelayState.
         --
@@ -67,6 +100,7 @@ function _M.access(self)
         local sp_req = self:request()
         return sp_req:redirect_to_idp_to_login(request_id)
     end
+
 
     local name_id = token.payload.sub
     local key_attr_name = self.config.key_attribute_name
@@ -197,25 +231,6 @@ function _M.finish_login(self)
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
-
-    --local session_id_or_jwt, err = ts:store(key_attr, session_expire_timestamp)
-    --if err ~= nil then
-    --    return api_error.new{
-    --        status_code = ngx.HTTP_FORBIDDEN,
-    --        err_code = 'err_token_store_store',
-    --        log_detail = string.format('finish_login, err=%s', err)
-    --    }
-    --end
-
-    --local sc = self:session_cookie()
-    --local ok, err = sc:set(session_id_or_jwt)
-    --if err ~= nil then
-    --    return api_error.new{
-    --        status_code = ngx.HTTP_FORBIDDEN,
-    --        err_code = 'err_session_cookie_set_empty',
-    --        log_detail = string.format('finish_login, err=%s', err)
-    --    }
-    --end
 
     return ngx.redirect(redirect_uri)
 end

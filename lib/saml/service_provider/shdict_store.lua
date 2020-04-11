@@ -60,16 +60,6 @@ function _M.issue_id(self, value, expire_seconds_func, config)
     return nil, 'issue_id: exceeded max_retry_count'
 end
 
-function _M.delete_id(self, id)
-    local dict = self.dict
-    local success, err, forcible = dict:delete(id)
-    if not success then
-        return string.format('delete_id: err=%s, forcible=%s', err, forcible)
-    end
-    ngx.log(ngx.INFO, 'shdict_store.delete_id id=', id)
-    return nil
-end
-
 function _M.take_uri_before_login(self, request_id, exptime)
     local dict = self.dict
     -- local dict = ngx.shared[self.dict_name]
@@ -101,6 +91,39 @@ function _M.take_uri_before_login(self, request_id, exptime)
         dict:delete(request_id)
     end
     return uri_before_login, true, nil
+end
+
+--- Use nonce
+-- @param self          shared dict store (object).
+-- @param nonce         nonce (string).
+-- @param config        config (table).
+-- @return allowed      (bool)
+-- @return first_use    (bool)
+-- @return err          (string or nil)
+function _M.use_nonce(self, nonce, config)
+    local dict = self.dict
+    local count, err, forcible = dict:incr(nonce, -1)
+    if err ~= nil then
+        return false, false, string.format('dict:incr: %s', err)
+    end
+    if count == config.usable_count - 1 then
+        local success, err = dict:expire(config.duration_after_first_use_seconds)
+        if not success then
+            return false, false, string.format('dict:expire: %s', err)
+        end
+        return true, true, nil
+    end
+    return true, false, nil
+end
+
+function _M.delete_id(self, id)
+    local dict = self.dict
+    local success, err, forcible = dict:delete(id)
+    if not success then
+        return string.format('delete_id: err=%s, forcible=%s', err, forcible)
+    end
+    ngx.log(ngx.INFO, 'shdict_store.delete_id id=', id)
+    return nil
 end
 
 -- ログイン成功時の処理

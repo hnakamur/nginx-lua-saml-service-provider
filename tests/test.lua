@@ -263,4 +263,62 @@ function TestServiceProvider:testFinishLoginBadBody()
     c:free()
 end
 
+function TestServiceProvider:testAccessReplayAttackProtection()
+    local c = new_http_client()
+    local c2 = new_http_client()
+
+    -- Send first request and receive redirect
+    local req = c:new_request{ url = 'https://sp.example.com/' }
+    local resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#1 err')
+    lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
+    local redirect_url = resp:redirect_url()
+
+    -- Follow redirect
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#2 err')
+    lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
+    lu.assertIsNil(resp:redirect_url(), 'response#2 redirect_url')
+
+    -- Finish login
+    local url = resp.header:get('X-Destination')
+    local body = resp.body
+    req = c:new_request{
+        method = 'POST',
+        url = url,
+        body = body,
+    }
+    resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#3 err')
+    lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
+    redirect_url = resp:redirect_url()
+    lu.assertNotNil(redirect_url, 'response#3 redirect_url')
+    local token = resp.header:get('set-cookie')
+    -- print('token=', token)
+    -- print('jwt_id=', resp.header:get('jwt-id'))
+    -- print('jwt_nonce=', resp.header:get('jwt-nonce'))
+
+    -- Access the site
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#4 err')
+    lu.assertEquals(resp.status_code, 200, 'response#4 status_code')
+    lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'response#4 body')
+
+    -- Replay attack by another client
+    req.header:add('cookie', token)
+    resp, err, errcode = c2:send_request(req)
+    lu.assertIsNil(err, 'attacker response err')
+    -- lu.assertEquals(resp.status_code, 200, 'attacker response status_code')
+    -- lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'attacker response body')
+    lu.assertEquals(resp.status_code, 403, 'attacker response status_code')
+    redirect_url = resp:redirect_url()
+    lu.assertIsNil(redirect_url, 'attacker response redirect_url')
+
+    c2:free()
+    c:free()
+end
+
+
 os.exit(lu.LuaUnit.run())
