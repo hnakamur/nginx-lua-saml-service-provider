@@ -80,35 +80,25 @@ function _M.finish_login(self)
         }
     end
 
-    if self.config.response.idp_certificate ~= nil then
-        local ok, err = sp_resp:verify_response_memory(response_xml)
-        if err ~= nil then
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_verify_resp_mem',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
-        end
-        if not ok then
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_verify_failed',
-                log_detail = 'finish_login'
-            }
-        end
-    else
-        local ok, err = sp_resp:verify_response(response_xml)
-        if err ~= nil then
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_verify_resp_cmd',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
-        end
+    local ok, err = sp_resp:verify_response_memory(response_xml)
+    if err ~= nil then
+        return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
+            err_code = 'err_verify_resp_mem',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
+    end
+    if not ok then
+        return api_error.new{
+            status_code = ngx.HTTP_FORBIDDEN,
+            err_code = 'err_verify_failed',
+            log_detail = 'finish_login'
+        }
     end
 
-    local request_id, not_on_or_after_s = sp_resp:take_request_id_from_response(response_xml)
-    local not_on_or_after, err = time.parse_iso8601_utc_time(not_on_or_after_s)
+    local vals = sp_resp:take_values_from_response(response_xml)
+
+    local not_on_or_after, err = time.parse_iso8601_utc_time(vals.not_on_or_after)
     if err ~= nil then
         -- Malicious date value attack.
         return api_error.new{
@@ -118,8 +108,9 @@ function _M.finish_login(self)
         }
     end
     local request_exptime = not_on_or_after - ngx.time()
+
     local ts = self:token_store()
-    local redirect_uri, ok, err = ts:take_uri_before_login(request_id, request_exptime)
+    local redirect_uri, ok, err = ts:take_uri_before_login(vals.request_id, request_exptime)
     ngx.log(ngx.DEBUG, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
     if err ~= nil or not ok then
         return api_error.new{
@@ -129,17 +120,8 @@ function _M.finish_login(self)
         }
     end
 
-    local attrs, err = sp_resp:take_attributes_from_response(response_xml)
-    if err ~= nil then
-        return api_error.new{
-            status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_take_attrs_from_resp',
-            log_detail = 'finish_login'
-        }
-    end
-
     local key_attr_name = self.config.key_attribute_name
-    local key_attr = attrs[key_attr_name]
+    local key_attr = vals.attrs[key_attr_name]
     if key_attr == nil then
         return api_error.new{
             status_code = ngx.HTTP_FORBIDDEN,
@@ -148,8 +130,7 @@ function _M.finish_login(self)
         }
     end
 
-    local exptime_str = sp_resp:take_session_expiration_time_from_response(response_xml)
-    local exptime, err = time.parse_iso8601_utc_time(exptime_str)
+    local exptime, err = time.parse_iso8601_utc_time(vals.session_not_on_or_after)
     if err ~= nil then
         -- Malicious date value attack.
         return api_error.new{

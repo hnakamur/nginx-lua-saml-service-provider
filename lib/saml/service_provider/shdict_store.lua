@@ -23,6 +23,12 @@ function _M.new(self, config)
         request_id_expire_seconds = config.request_id_expire_seconds or 300,
         request_id_prefix = config.request_id_prefix or '_',
         request_id_random_byte_len = config.request_id_random_byte_len or 16,
+        jti_generator = function()
+            return 't' .. random.hex(config.jti_random_byte_len or 16)
+        end,
+        nonce_generator = function()
+            return 'n' .. random.hex(config.nonce_random_byte_len or 16)
+        end,
         session_store = session_store:new{
             dict_name = dict_name,
             id_generator = function()
@@ -68,7 +74,7 @@ function _M.take_uri_before_login(self, request_id, exptime)
     -- the assertion would be considered valid based on the NotOnOrAfter attribute
     -- in the <SubjectConfirmationData>.
     if exptime > 0 then
-        local success, err, forcible = dict:set(request_id, '', exptime)
+        local success, err, forcible = dict:replace(request_id, '', exptime)
         if not success then
             return nil, false,
                 string.format("empty uri_before_login for request_id, dict=%s, request_id=%s, err=%s, forcible=%s",
@@ -78,6 +84,84 @@ function _M.take_uri_before_login(self, request_id, exptime)
         dict:delete(request_id)
     end
     return uri_before_login, true, nil
+end
+
+-- ログイン成功時の処理
+-- shared dictは jti のキーでセッションの有効期限やメールアドレスなどをログイン完了時に設定します。
+-- それとは別に jti + ':" + nonce のキーに利用回数の残りと期限を設定します。
+-- key: jti
+-- value:
+-- {
+--   "sub": "john-doe",
+--   "exp": 1586347800,
+--   "mail": "john.doe@example.com",
+--   "nonce": "XXXXXXXX"
+-- }
+-- ttl: sessions'exptime
+-- jwt_token
+-- {
+--   "header": {"typ":"JWT", "alg":"HS256"},
+--   "payload": {
+--     "kid": "key_2020_001_ZZZZZZZZZZZZZZZ",
+--     "iss": "https://sp.example.com",
+--     "aud": "https://sp.example.com",
+--     "sub": "john-doe",
+--     "mail": "john.doe@example.com",
+--     "exp": 1586347800,
+--     "nbf": 1586347500,
+--     "jti": "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
+--     "nonce": "YYYYYYYYYYYYYYYYYYY"
+--   }
+-- }
+--
+-- key: jti + ':' + nonce
+-- value: nonce_usable_count (ex: 3)
+-- ttl: session's exptime
+--
+-- アクセス時の処理
+-- jwt を共有鍵で検証。
+-- cookieで送られてきた jwt 内の jti で shared dictを引き、 sub, mail, exp がjwt内と一致するかチェック。
+-- jwt 内の iss と aud が設定ファイルの値と一致するかチェック。
+-- local nonce_key = jti + ':' + nonce
+-- local newval, err, forcible = dict:incr(nonce_key, -1)
+-- newval < 0 or err ~= nil なら 403 Forbidden
+-- if newval == nonce_key_usable_count -1 then -- first use
+--   local success, err = dict:expire(nonce_key, nonce_exptime_seconds)
+--   -- 新しいnonceを発行
+--   local exptime = jwt_token.payload.exp - ngx.time()
+--   while exptime > 0 then
+--     local new_nonce = issue_new_nonce
+--     local new_nonce_key = jti + ':' + new_nonce
+--     local success, err, forcieble = dict:add(new_nonce_key, nonce_usable_count, exptime)
+--     if success then
+--       jwt_token.nonce = new_nonce
+--       local jwt_token_str = cjson.encode(jwt_token)
+--       success, err, forcible = dict:replace(jti, jwt_token_str, exptime)
+--       if err ~= nil or not successible then
+--       end
+--       set-cookie: jwt_token_str
+--       return
+--     elseif err ~= 'exists' then
+--       log_error
+--       return
+--     end
+--     exptime = jwt_token.payload.exp - ngx.time()
+--   end
+-- end
+--
+-- jwt_config
+-- algorithm = 'HS256',
+-- current_key_id: 'key_2020_001_ZZZZZZZZZZZZZZZZZ',
+-- keys = {
+--   key_2020_001_ZZZZZZZZZZZZZZZZZ = 'WWWWWWWWWWWWWWWWWWWWWWW',
+-- },
+-- nonce_usable_count = 1,
+-- nonce_exptime_seconds = 3, -- exptime in seconds after first use
+
+function _M.update_on_finish_login(self)
+end
+
+function _M.update_on_access(self)
 end
 
 --- Store the attribute value and issue session ID.
