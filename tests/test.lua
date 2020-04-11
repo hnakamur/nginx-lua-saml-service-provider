@@ -49,11 +49,7 @@ function TestAccessToken:testSignVerify()
     }
     resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#2 err')
-    -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
-    -- print('resp.body:', resp.body)
     lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
-    -- local jwt_token = json.decode(resp.body)
-    -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
 
     req = c:new_request{
         method = 'POST',
@@ -63,11 +59,7 @@ function TestAccessToken:testSignVerify()
     req.header:add('Disable-All-Keys', '1')
     resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#2 err')
-    -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
-    -- print('resp.body:', resp.body)
     lu.assertEquals(resp.status_code, 403, 'response#2 status_code')
-    -- local jwt_token = json.decode(resp.body)
-    -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
 
     c:free()
 end
@@ -108,10 +100,8 @@ function TestServiceProvider:testLoginSuccess()
     lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
-    print('response#3 nonce=', resp.header:get('jwt-nonce'))
     local token = resp.header:get('set-cookie')
     lu.assertNotNil(token, 'response#3 token')
-    print('response#3 token=', token)
 
     -- Access the site
     req = c:new_request{ url = redirect_url }
@@ -119,12 +109,8 @@ function TestServiceProvider:testLoginSuccess()
     lu.assertIsNil(err, 'response#4 err')
     lu.assertEquals(resp.status_code, 200, 'response#4 status_code')
     lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'response#4 body')
-    print('response#4 new-nonce=', resp.header:get('new-nonce'))
-    print('response#4 old-token=', resp.header:get('old-token'))
-    print('response#4 new-token=', resp.header:get('new-token'))
     local token2 = resp.header:get('set-cookie')
     lu.assertNotNil(token2, 'response#4 token')
-    print('response#4 token2=', token2)
     lu.assertNotEquals(token, token2,
         'response#4 token should be different from response#3 token')
 
@@ -188,8 +174,6 @@ function TestServiceProvider:testFinishLoginReplayAttackProtection()
     lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
-    -- print('jwt_id=', resp.header:get('jwt-id'))
-    -- print('jwt_nonce=', resp.header:get('jwt-nonce'))
 
     -- Replay attack by another client
     req = c:new_request{
@@ -240,7 +224,6 @@ function TestServiceProvider:testURLAfterLoginSuccess()
     lu.assertIsNil(err, 'response#3 err')
     redirect_url = resp:redirect_url()
     lu.assertEquals(redirect_url, first_url, 'response#3 redirect_url')
-    -- print('set-cookie form finish login: ', resp.header:get('set-cookie'))
 
     -- Access the site
     req = c:new_request{ url = redirect_url }
@@ -307,9 +290,6 @@ function TestServiceProvider:testAccessReplayAttackProtection()
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
     local token = resp.header:get('set-cookie')
-    -- print('token=', token)
-    -- print('jwt_id=', resp.header:get('jwt-id'))
-    -- print('jwt_nonce=', resp.header:get('jwt-nonce'))
 
     -- Access the site
     req = c:new_request{ url = redirect_url }
@@ -322,8 +302,6 @@ function TestServiceProvider:testAccessReplayAttackProtection()
     req.header:add('cookie', token)
     resp, err, errcode = c2:send_request(req)
     lu.assertIsNil(err, 'attacker response err')
-    -- lu.assertEquals(resp.status_code, 200, 'attacker response status_code')
-    -- lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'attacker response body')
     lu.assertEquals(resp.status_code, 302, 'attacker response status_code')
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'attacker response redirect_url')

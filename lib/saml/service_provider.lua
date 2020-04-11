@@ -62,13 +62,10 @@ function _M.access(self)
                 if err ~= nil then
                     ngx.log(ngx.ERR, err)
                 end
-                ngx.header['new-nonce'] = new_nonce
-                ngx.header['old-token'] = cjson.encode(token)
                 local new_token = access_token.new{
                     payload = token.payload
                 }
                 new_token.payload.nonce = new_nonce
-                ngx.header['new-token'] = cjson.encode(new_token)
 
                 local sign_cfg = self.config.session.store.jwt_sign
                 local signed_token = new_token:sign(sign_cfg)
@@ -173,7 +170,6 @@ function _M.finish_login(self)
             ngx.log(ngx.ERR, err)
             return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
-        -- ngx.header.jwt_id = jwt_id
 
         local nonce_cfg = self.config.session.store.jwt_nonce
         local nonce, err = ss:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
@@ -182,7 +178,6 @@ function _M.finish_login(self)
             ngx.log(ngx.ERR, err)
             return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
-        ngx.header.jwt_nonce = nonce
 
         local iss = self.config.request.sp_entity_id
         local aud = iss
