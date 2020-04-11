@@ -107,13 +107,13 @@ function _M.use_nonce(self, nonce, config)
         return false, false, string.format('dict:incr: %s', err)
     end
     if count == config.usable_count - 1 then
-        local success, err = dict:expire(config.duration_after_first_use_seconds)
+        local success, err = dict:expire(nonce, config.duration_after_first_use_seconds)
         if not success then
             return false, false, string.format('dict:expire: %s', err)
         end
         return true, true, nil
     end
-    return true, false, nil
+    return count >= 0, false, nil
 end
 
 function _M.delete_id(self, id)

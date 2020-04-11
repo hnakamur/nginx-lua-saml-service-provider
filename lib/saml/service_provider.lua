@@ -46,36 +46,35 @@ function _M.access(self)
     if err ~= nil then
         ngx.log(ngx.ERR, err)
     else
-        allowed = true
-        -- local nonce = token.payload.nonce
-        -- local nonce_cfg = self.config.session.store.jwt_nonce
-        -- local first_use
-        -- allowed, first_use, err = ts:use_nonce(nonce, nonce_cfg)
-        -- if err ~= nil then
-        --     ngx.log(ngx.ERR, err)
-        -- end
-        -- if first_use then
-        --     local session_expire_timestamp = token.payload.exp
-        --     local session_expire_seconds_func = function()
-        --         return session_expire_timestamp - ngx.now()
-        --     end
-        --     local new_nonce, err = ts:issue_id(nonce_cfg.usable_count,
-        --         session_expire_seconds_func, nonce_cfg)
-        --     if err ~= nil then
-        --         ngx.log(ngx.ERR, err)
-        --     end
-        --     ngx.header['new-nonce'] = new_nonce
-        --     token.payload.nonce = new_nonce
+        local nonce = token.payload.nonce
+        local nonce_cfg = self.config.session.store.jwt_nonce
+        local first_use
+        allowed, first_use, err = ts:use_nonce(nonce, nonce_cfg)
+        if err ~= nil then
+            ngx.log(ngx.ERR, err)
+        end
+        if first_use then
+            local session_expire_timestamp = token.payload.exp
+            local session_expire_seconds_func = function()
+                return session_expire_timestamp - ngx.now()
+            end
+            local new_nonce, err = ts:issue_id(nonce_cfg.usable_count,
+                session_expire_seconds_func, nonce_cfg)
+            if err ~= nil then
+                ngx.log(ngx.ERR, err)
+            end
+            ngx.header['new-nonce'] = new_nonce
+            token.payload.nonce = new_nonce
 
-        --     local sign_cfg = self.config.session.store.jwt_sign
-        --     local signed_token = token:sign(sign_cfg)
-        --     local sc = self:session_cookie()
-        --     local ok
-        --     ok, err = sc:set(signed_token)
-        --     if err ~= nil then
-        --         ngx.log(ngx.ERR, err)
-        --     end
-        -- end
+            local sign_cfg = self.config.session.store.jwt_sign
+            local signed_token = token:sign(sign_cfg)
+            local sc = self:session_cookie()
+            local ok
+            ok, err = sc:set(signed_token)
+            if err ~= nil then
+                ngx.log(ngx.ERR, err)
+            end
+        end
     end
     if err ~= nil or not allowed then
         -- NOTE: uri_before_login can be long so we store it in shared dict
