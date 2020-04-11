@@ -2,36 +2,6 @@
 
 local lu = require('luaunit')
 
--- TestAccessToken = {}
--- function TestAccessToken:testNewEncodeDecode()
---     local saml_sp_access_token = require('saml.service_provider.access_token')
---     local token = saml_sp_access_token.new{
---         header = {typ = "JWT", alg = "HS256"},
---         payload = {
---             kid = "key_2020_001_ZZZZZZZZZZZZZZZ",
---             iss = "https://sp.example.com",
---             aud = "https://sp.example.com",
---             sub = "john-doe",
---             mail = "john.doe@example.com",
---             exp = 1586347800,
---             nbf = 1586347500,
---             jti = "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
---             nonce = "YYYYYYYYYYYYYYYYYYY"
---         }
---     }
--- 
---     local decode_got = saml_sp_access_token.decode([[{"header":{"alg":"HS256","typ":"JWT"},"payload":{"kid":"key_2020_001_ZZZZZZZZZZZZZZZ","mail":"john.doe@example.com","iss":"https:\/\/sp.example.com","aud":"https:\/\/sp.example.com","sub":"john-doe","nonce":"YYYYYYYYYYYYYYYYYYY","jti":"XXXXXXXXXXXXXXXXXXXXXXXXXXX","exp":1586347800,"nbf":1586347500}}]])
---     lu.assertEquals(decode_got, token, 'token decode')
--- 
---     local encode_got = token:encode()
---     local decode2_got = saml_sp_access_token.decode(encode_got)
---     lu.assertEquals(decode2_got, token, 'token decode2')
--- 
---     token.payload.nonce = "VVVVVVVVVVVVVVVVVVV"
---     local decode3_got = saml_sp_access_token.decode([[{"header":{"alg":"HS256","typ":"JWT"},"payload":{"kid":"key_2020_001_ZZZZZZZZZZZZZZZ","mail":"john.doe@example.com","iss":"https:\/\/sp.example.com","aud":"https:\/\/sp.example.com","sub":"john-doe","jti":"XXXXXXXXXXXXXXXXXXXXXXXXXXX","exp":1586347800,"nbf":1586347500,"nonce":"VVVVVVVVVVVVVVVVVVV"}}]])
---     lu.assertEquals(decode3_got, token, 'token encode3')
--- end
-
 TestResponse = {}
 function TestResponse:testTakeValuesFromResponse()
     local res_xml = [[<?xml version="1.0"?>

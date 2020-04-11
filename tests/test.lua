@@ -21,40 +21,54 @@ function TestAccessToken:testSignVerify()
     with_http_client(function(c)
         local resp, err, errcode
 
-        local payload = {
-            kid = "key_2020_001_ZZZZZZZZZZZZZZZ",
-            iss = "https://sp.example.com",
-            aud = "https://sp.example.com",
-            sub = "john-doe",
-            mail = "john.doe@example.com",
-            exp = 1586347800,
-            nbf = 1586347500,
-            jti = "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
-            nonce = "YYYYYYYYYYYYYYYYYYY"
-        }
-        resp, err, errcode = c:send_request(
-            c:new_request{
-                method = 'POST',
-                url = 'https://sp.example.com/test/sign-jwt',
-                body = json.encode(payload)
+        local token_obj = {
+            payload = {
+                iss = "https://sp.example.com",
+                aud = "https://sp.example.com",
+                sub = "john-doe",
+                mail = "john.doe@example.com",
+                exp = 1586347800,
+                nbf = 1586347500,
+                jti = "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
+                nonce = "YYYYYYYYYYYYYYYYYYY"
             }
-        )
+        }
+        local req = c:new_request{
+            method = 'POST',
+            url = 'https://sp.example.com/test/sign-jwt',
+            body = json.encode(token_obj)
+        }
+        resp, err, errcode = c:send_request(req)
         lu.assertIsNil(err, 'response#1 err')
         lu.assertEquals(resp.status_code, 200, 'response#1 status_code')
         local signed_token = resp.body
 
-        resp, err, errcode = c:send_request(
-            c:new_request{
-                method = 'POST',
-                url = 'https://sp.example.com/test/verify-jwt',
-                body = signed_token
-            }
-        )
+        req = c:new_request{
+            method = 'POST',
+            url = 'https://sp.example.com/test/verify-jwt',
+            body = signed_token
+        }
+        resp, err, errcode = c:send_request(req)
         lu.assertIsNil(err, 'response#2 err')
+        -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
+        -- print('resp.body:', resp.body)
         lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
-        local jwt_token = json.decode(resp.body)
-        print('resp.body:', resp.body)
-        lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
+        -- local jwt_token = json.decode(resp.body)
+        -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
+
+        req = c:new_request{
+            method = 'POST',
+            url = 'https://sp.example.com/test/verify-jwt',
+            body = signed_token
+        }
+        req.header:add('Disable-All-Keys', '1')
+        resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#2 err')
+        -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
+        -- print('resp.body:', resp.body)
+        lu.assertEquals(resp.status_code, 403, 'response#2 status_code')
+        -- local jwt_token = json.decode(resp.body)
+        -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
     end)
 end
 
