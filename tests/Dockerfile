@@ -15,6 +15,9 @@ RUN apt-get install -y libxmlsec1 libxmlsec1-openssl lua-cjson \
  && ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1.so \
  && ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so
 
+RUN apt-get install -y redis \
+ && sed -i -e 's/^bind 127.0.0.1 ::1$/bind 127.0.0.1/' /etc/redis/redis.conf
+
 RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
     -set_serial 1 \
     -days 365 \

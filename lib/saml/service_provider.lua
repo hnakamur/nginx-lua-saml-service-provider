@@ -5,6 +5,7 @@ local saml_sp_request = require "saml.service_provider.request"
 local saml_sp_response = require "saml.service_provider.response"
 local random = require "saml.service_provider.random"
 local time = require "saml.service_provider.time"
+local redis_store = require "saml.service_provider.redis_store"
 local shdict_store = require "saml.service_provider.shdict_store"
 local api_error = require "saml.service_provider.api_error"
 local access_token = require "saml.service_provider.access_token"
@@ -55,7 +56,7 @@ function _M.access(self)
             if first_use then
                 local session_expire_timestamp = token.payload.exp
                 local session_expire_seconds_func = function()
-                    return session_expire_timestamp - ngx.now()
+                    return session_expire_timestamp - ngx.time()
                 end
                 local new_nonce, err = ss:issue_id(nonce_cfg.usable_count,
                     session_expire_seconds_func, nonce_cfg)
@@ -150,7 +151,7 @@ function _M.finish_login(self)
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
-    local req_exptime = req_expire_timestamp - ngx.now()
+    local req_exptime = req_expire_timestamp - ngx.time()
 
     local ss = self:session_store()
     local ret = (function()
@@ -184,7 +185,7 @@ function _M.finish_login(self)
             }
         end
         local session_expire_seconds_func = function()
-            return session_expire_timestamp - ngx.now()
+            return session_expire_timestamp - ngx.time()
         end
 
         local jwt_id, err = ss:issue_id('', session_expire_seconds_func,
