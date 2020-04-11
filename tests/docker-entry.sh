@@ -25,8 +25,8 @@ done
 export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;/usr/local/lbase64/?.lua;./vendor/?.lua;;'
 luajit test.lua --verbose "$@"
 if [ $? -eq 0 ]; then
-    kill $nginx_pid
     echo 'shdict_store test OK!'
+    kill $nginx_pid
 else
     tail -n 20 /var/log/nginx/error.log
     cat <<EOF
@@ -55,8 +55,9 @@ done
 export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;/usr/local/lbase64/?.lua;./vendor/?.lua;;'
 luajit test.lua --verbose "$@"
 if [ $? -eq 0 ]; then
-    kill $nginx_pid
     echo 'redis_store test OK!'
+    kill $nginx_pid
+    #wait $nginx_pid
 else
     tail -n 20 /var/log/nginx/error.log
     cat <<EOF

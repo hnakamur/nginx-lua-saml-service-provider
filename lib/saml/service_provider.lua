@@ -7,7 +7,6 @@ local random = require "saml.service_provider.random"
 local time = require "saml.service_provider.time"
 local redis_store = require "saml.service_provider.redis_store"
 local shdict_store = require "saml.service_provider.shdict_store"
-local api_error = require "saml.service_provider.api_error"
 local access_token = require "saml.service_provider.access_token"
 local cjson = require "cjson.safe"
 
@@ -44,14 +43,14 @@ function _M.access(self)
         local allowed
         local token, err = self:_get_and_verify_token()
         if err ~= nil then
-            ngx.log(ngx.ERR, err)
+            ngx.log(ngx.WARN, err)
         else
             local nonce = token.payload.nonce
             local nonce_cfg = self.config.session.store.jwt_nonce
             local first_use
             allowed, first_use, err = ss:use_nonce(nonce, nonce_cfg)
             if err ~= nil then
-                ngx.log(ngx.ERR, err)
+                ngx.log(ngx.WARN, err)
             end
             if first_use then
                 local session_expire_timestamp = token.payload.exp
@@ -91,10 +90,7 @@ function _M.access(self)
             end
             local request_id, err = ss:issue_id(uri_before_login, expire_seconds_func, cfg)
             if err ~= nil then
-                return api_error.new{
-                    err_code = 'err_issue_request_id',
-                    log_detail = string.format('access, err=%s', err)
-                }
+                ngx.log(ngx.ERR, err)
             end
             local sp_req = self:request()
             return sp_req:redirect_to_idp_to_login(request_id)
@@ -117,27 +113,18 @@ function _M.finish_login(self)
 
     local response_xml, err = sp_resp:read_and_base64decode_response()
     if err ~= nil then
-        return api_error.new{
-            status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_decode_saml_response',
-            log_detail = string.format('finish_login, err=%s', err)
-        }
+        ngx.log(ngx.WARN, err)
+        return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 
     local ok, err = sp_resp:verify_response_memory(response_xml)
     if err ~= nil then
-        return api_error.new{
-            status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_verify_resp_mem',
-            log_detail = string.format('finish_login, err=%s', err)
-        }
+        ngx.log(ngx.WARN, err)
+        return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
     if not ok then
-        return api_error.new{
-            status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_verify_failed',
-            log_detail = 'finish_login'
-        }
+        ngx.log(ngx.WARN, 'SAMLResponse verify failed')
+        return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 
     local vals = sp_resp:take_values_from_response(response_xml)
@@ -145,44 +132,31 @@ function _M.finish_login(self)
     local req_expire_timestamp, err = time.parse_iso8601_utc_time(vals.not_on_or_after)
     if err ~= nil then
         -- Malicious date value attack.
-        return api_error.new{
-            status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_invalid_not_on_or_after',
-            log_detail = string.format('finish_login, err=%s', err)
-        }
+        ngx.log(ngx.WARN, err)
+        return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
     local req_exptime = req_expire_timestamp - ngx.time()
 
     local ss = self:session_store()
     local ret = (function()
         local redirect_uri, ok, err = ss:take_uri_before_login(vals.request_id, req_exptime)
-        ngx.log(ngx.WARN, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
         if err ~= nil or not ok then
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_take_uri_before_login',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
+            ngx.log(ngx.WARN, err)
+            return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
 
         local key_attr_name = self.config.key_attribute_name
         local key_attr = vals.attrs[key_attr_name]
         if key_attr == nil then
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_attr_not_found',
-                log_detail = 'finish_login'
-            }
+            ngx.log(ngx.WARN, 'key_attr not found in SAMLResponse')
+            return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
 
         local session_expire_timestamp, err = time.parse_iso8601_utc_time(vals.session_not_on_or_after)
         if err ~= nil then
             -- Malicious date value attack.
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_session_exp_time',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
+            ngx.log(ngx.WARN, err)
+            return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
         local session_expire_seconds_func = function()
             return session_expire_timestamp - ngx.time()
@@ -191,10 +165,8 @@ function _M.finish_login(self)
         local jwt_id, err = ss:issue_id('', session_expire_seconds_func,
             self.config.session.store.jwt_id)
         if err ~= nil then
-            return api_error.new{
-                err_code = 'err_issue_jwt_id',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
+            ngx.log(ngx.ERR, err)
+            return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
         -- ngx.header.jwt_id = jwt_id
 
@@ -202,10 +174,8 @@ function _M.finish_login(self)
         local nonce, err = ss:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
             nonce_cfg)
         if err ~= nil then
-            return api_error.new{
-                err_code = 'err_issue_jwt_nonce',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
+            ngx.log(ngx.ERR, err)
+            return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
         -- ngx.header.jwt_nonce = nonce
 
@@ -228,11 +198,8 @@ function _M.finish_login(self)
         local sc = self:session_cookie()
         local ok, err = sc:set(signed_token)
         if err ~= nil then
-            return api_error.new{
-                status_code = ngx.HTTP_FORBIDDEN,
-                err_code = 'err_session_cookie_set_jwt',
-                log_detail = string.format('finish_login, err=%s', err)
-            }
+            ngx.log(ngx.ERR, err)
+            return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
 
         return ngx.redirect(redirect_uri)
@@ -247,7 +214,7 @@ function _M.logout(self)
     local ret = (function()
         local token, err = self:_get_and_verify_token()
         if err ~= nil then
-            ngx.log(ngx.ERR, 'logout: get and verify token: ', err)
+            ngx.log(ngx.WARN, 'logout: get and verify token: ', err)
         else
             -- In ideal, we would delete the cookie by setting expiration to
             -- the Unix epoch date.

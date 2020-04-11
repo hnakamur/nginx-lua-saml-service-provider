@@ -19,13 +19,16 @@ function _M.new(self, config)
 	local ok, err
     if cfg.host ~= nil then
 	    ok, err = red:connect(cfg.host, cfg.port, cfg.connect_options)
+        if not ok then
+            ngx.log(ngx.EMERG, 'connect redis: ', err,
+                ', host=', cfg.host, ', port=', cfg.port)
+            return nil
+        end
     elseif cfg.domain_socket ~= nil then
 	    ok, err = red:connect(cfg.domain_socket, cfg.connect_options)
+            ngx.log(ngx.EMERG, 'connect redis: ', err,
+                ', domain_socket=', cfg.domain_socket)
     end
-	if not ok then
-        ngx.log(ngx.EMERG, 'connect redis: ', err)
-        return nil
-	end
 
     return setmetatable({
         config = config,
@@ -55,8 +58,9 @@ function _M.issue_id(self, value, expire_seconds_func, config)
         end
         local ok, err = red:set(id, value, 'EX', expire_seconds, 'NX')
         if not ok then
-            ngx.log(ngx.ERR, 'redis:set: ', err, ', id=', id, ', value=', value, ', expire_seconds=', expire_seconds)
-            return nil, err
+            ngx.log(ngx.ERR, 'redis:set: ', err, ', id=', id, ', value=', value,
+                ', expire_seconds=', expire_seconds)
+            return nil, 'issue_id: redis:set'
         elseif ok ~= ngx.null then
             return id
         end
@@ -66,12 +70,12 @@ end
 
 function _M.take_uri_before_login(self, request_id, exptime)
     local red = self.red
-    ngx.log(ngx.INFO, 'before redis:get: request_id=', request_id)
     local uri_before_login, err = red:get(request_id)
     if err ~= nil or uri_before_login == ngx.null or uri_before_login == '' then
-        ngx.log(ngx.ERR, 'redis:get: err=', err, ', uri_before_login=', uri_before_login)
+        ngx.log(ngx.ERR, 'redis:get: err=', err,
+            ', uri_before_login=', uri_before_login)
         -- Already finished login, this is replay attack.
-        return nil, false, err
+        return nil, false, 'take_uri_before_login: redis:get'
     end
 
     -- NOTE: We MUST keep used request_id until not_on_or_after
@@ -88,14 +92,15 @@ function _M.take_uri_before_login(self, request_id, exptime)
     if exptime > 0 then
         local ok, err = red:set(request_id, '', 'EX', exptime, 'XX')
         if not ok then
-            ngx.log(ngx.ERR, 'redis:set: ', err, ', request_id=', request_id, ', exptime=', exptime)
-            return nil, false, err
+            ngx.log(ngx.ERR, 'redis:set: ', err, ', request_id=', request_id,
+                ', exptime=', exptime)
+            return nil, false, 'take_uri_before_login: redis:set'
         end
     else
         local ok, err = red:del(request_id)
         if not ok then
-            ngx.log(ngx.ERR, 'redis:delete: ', err)
-            return nil, false, err
+            ngx.log(ngx.ERR, 'redis:del: ', err, ', request_id=', request_id)
+            return nil, false, 'take_uri_before_login: redis:del'
         end
     end
     return uri_before_login, true, nil
@@ -110,16 +115,19 @@ end
 -- @return err          (string or nil)
 function _M.use_nonce(self, nonce, config)
     local red = self.red
+    -- NOTE: If key does not exist, count will become -1.
+    -- https://redis.io/commands/incrby
     local count, err = red:incrby(nonce, -1)
     if err ~= nil then
-        ngx.log(ngx.ERR, 'redis:incrby: ', err)
-        return false, false, err
+        ngx.log(ngx.ERR, 'redis:incrby: ', err, ', nonce=', nonce)
+        return false, false, 'use_nonce: redis:incrby'
     end
     if count == config.usable_count - 1 then
         local ok, err = red:expire(nonce, config.duration_after_first_use_seconds)
         if not ok then
-            ngx.log(ngx.ERR, 'redis:expire: ', err)
-            return false, false, err
+            ngx.log(ngx.ERR, 'redis:expire: ', err, ', nonce=', nonce,
+                ', exptime=', config.duration_after_first_use_seconds)
+            return false, false, 'use_nonce: redis:expire'
         end
         return true, true, nil
     end
