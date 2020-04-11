@@ -8,6 +8,8 @@ local time = require "saml.service_provider.time"
 local jwt_store = require "saml.service_provider.jwt_store"
 local shdict_store = require "saml.service_provider.shdict_store"
 local api_error = require "saml.service_provider.api_error"
+local access_token = require "saml.service_provider.access_token"
+local cjson = require "cjson.safe"
 
 local setmetatable = setmetatable
 
@@ -21,30 +23,28 @@ function _M.new(self, config)
     }, mt)
 end
 
-function _M.access(self)
+function _M._get_and_verify_token(self)
     local session_cookie = self:session_cookie()
-    local session_id_or_jwt, err = session_cookie:get()
+    local signed_token, err = session_cookie:get()
+    ngx.log(ngx.DEBUG, '_get_and_verify_token signed_token=', signed_token, ', err=', err)
     if err ~= nil then
-        return api_error.new{
-            err_code = 'err_session_cookie_get',
-            log_detail = string.format('access, err=%s', err)
-        }
+        return nil, err
     end
 
+    local verify_cfg = self.config.session.store.jwt_sign
+    local token, err = access_token.verify(verify_cfg, signed_token)
+    -- ngx.log(ngx.DEBUG, '_get_and_verify_token after verify, token=', cjson.encode(token))
+    -- ngx.log(ngx.DEBUG, '_get_and_verify_token verify err=', err)
+    return token, err
+end
+
+function _M.access(self)
     local ts = self:token_store()
-    local key_attr_name = self.config.key_attribute_name
-    local key_attr = nil
-    if session_id_or_jwt ~= nil then
-        key_attr, err = ts:retrieve(session_id_or_jwt)
-        if err ~= nil then
-            return api_error.new{
-                err_code = 'err_token_store_retrieve',
-                log_detail = string.format('access, err=%s', err)
-            }
-        end
-    end
 
-    if session_id_or_jwt == nil or key_attr == nil then
+    local token, err = self:_get_and_verify_token()
+    if err ~= nil then
+        -- TODO: log err
+
         -- NOTE: uri_before_login can be long so we store it in shared dict
         -- instead of setting it to RelayState.
         --
@@ -68,6 +68,10 @@ function _M.access(self)
         return sp_req:redirect_to_idp_to_login(request_id)
     end
 
+    local name_id = token.payload.sub
+    local key_attr_name = self.config.key_attribute_name
+    local key_attr = token.payload[key_attr_name]
+    ngx.req.set_header('name-id', name_id)
     ngx.req.set_header(key_attr_name, key_attr)
     return nil
 end
@@ -111,11 +115,11 @@ function _M.finish_login(self)
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
-    local req_exptime = req_expire_timestamp - ngx.time()
+    local req_exptime = req_expire_timestamp - ngx.now()
 
     local ts = self:token_store()
     local redirect_uri, ok, err = ts:take_uri_before_login(vals.request_id, req_exptime)
-    ngx.log(ngx.DEBUG, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
+    ngx.log(ngx.WARN, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
     if err ~= nil or not ok then
         return api_error.new{
             status_code = ngx.HTTP_FORBIDDEN,
@@ -143,55 +147,107 @@ function _M.finish_login(self)
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
+    local session_expire_seconds_func = function()
+        return session_expire_timestamp - ngx.now()
+    end
 
-    local session_id_or_jwt, err = ts:store(key_attr, session_expire_timestamp)
+    local jwt_id, err = ts:issue_id('', session_expire_seconds_func,
+        self.config.session.store.jwt_id)
     if err ~= nil then
         return api_error.new{
-            status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_token_store_store',
+            err_code = 'err_issue_jwt_id',
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
+    -- ngx.header.jwt_id = jwt_id
 
+    local nonce_cfg = self.config.session.store.jwt_nonce
+    local nonce, err = ts:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
+        nonce_cfg)
+    if err ~= nil then
+        return api_error.new{
+            err_code = 'err_issue_jwt_nonce',
+            log_detail = string.format('finish_login, err=%s', err)
+        }
+    end
+    -- ngx.header.jwt_nonce = nonce
+
+    local iss = self.config.request.sp_entity_id
+    local aud = iss
+    local token = access_token.new{
+        payload = {
+            iss = iss,
+            aud = aud,
+            sub = vals.name_id,
+            mail = key_attr,
+            exp = session_expire_timestamp,
+            nbf = ngx.time(),
+            jti = jwt_id,
+            nonce = nonce
+        }
+    }
+    local sign_cfg = self.config.session.store.jwt_sign
+    local signed_token = token:sign(sign_cfg)
     local sc = self:session_cookie()
-    local ok, err = sc:set(session_id_or_jwt)
+    local ok, err = sc:set(signed_token)
     if err ~= nil then
         return api_error.new{
             status_code = ngx.HTTP_FORBIDDEN,
-            err_code = 'err_session_cookie_set_empty',
+            err_code = 'err_session_cookie_set_jwt',
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
+
+    --local session_id_or_jwt, err = ts:store(key_attr, session_expire_timestamp)
+    --if err ~= nil then
+    --    return api_error.new{
+    --        status_code = ngx.HTTP_FORBIDDEN,
+    --        err_code = 'err_token_store_store',
+    --        log_detail = string.format('finish_login, err=%s', err)
+    --    }
+    --end
+
+    --local sc = self:session_cookie()
+    --local ok, err = sc:set(session_id_or_jwt)
+    --if err ~= nil then
+    --    return api_error.new{
+    --        status_code = ngx.HTTP_FORBIDDEN,
+    --        err_code = 'err_session_cookie_set_empty',
+    --        log_detail = string.format('finish_login, err=%s', err)
+    --    }
+    --end
 
     return ngx.redirect(redirect_uri)
 end
 
 function _M.logout(self)
     local sc = self:session_cookie()
-    local session_id_or_jwt, err = sc:get()
+    local ts = self:token_store()
+
+    local token, err = self:_get_and_verify_token()
     if err ~= nil then
-        return api_error.new{
-            err_code = 'err_session_cookie_get',
-            log_detail = string.format('logout, err=%s', err)
-        }
-    end
-
-    if session_id_or_jwt ~= nil then
-        local ts = self:token_store()
-        ts:delete(session_id_or_jwt)
-
+        ngx.log(ngx.ERR, 'logout: get and verify token: ', err)
+    else
         -- In ideal, we would delete the cookie by setting expiration to the Unix epoch date.
         -- In reality, curl still sends the cookie after receiving the Unix epoch date
         -- with set-cookie, so we have to change the cookie value instead of deleting it.
         local ok, err = sc:set("")
         if err ~= nil then
-            return api_error.new{
-                err_code = 'err_session_cookie_set_empty',
-                log_detail = string.format('logout, err=%s', err)
-            }
+            ngx.log(ngx.ERR, 'logout: set cookie to empty: ', err)
+        end
+
+        local jwt_id = token.payload.jti
+        err = ts:delete_id(jwt_id)
+        if err ~= nil then
+            ngx.log(ngx.ERR, 'logout: delete jwt_id: ', err)
+        end
+
+        local nonce = token.payload.nonce
+        err = ts:delete_id(nonce)
+        if err ~= nil then
+            ngx.log(ngx.ERR, 'logout: delete nonce: ', err)
         end
     end
-
     return ngx.redirect(self.config.redirect.url_after_logout)
 end
 

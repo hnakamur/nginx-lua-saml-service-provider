@@ -22,8 +22,7 @@ function handle_saml_error(err)
 
     if type(err) == 'string' then
         ngx.log(ngx.ERR, err)
-        ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-        return
+        return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
     end
 
     if err.log_detail ~= nil then
@@ -33,7 +32,7 @@ function handle_saml_error(err)
         ngx.log(err.log_level,
             string.format('saml_error err_code=%s', err.err_code))
     end
-    ngx.exit(err.status_code)
+    return ngx.exit(err.status_code)
 end
 
 ngx.log(ngx.INFO, 'service_provider_init.lua end')

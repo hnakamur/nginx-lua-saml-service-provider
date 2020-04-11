@@ -37,7 +37,7 @@ function _M.read_and_base64decode_response(self)
     ngx.req.read_body()
     local args, err = ngx.req.get_post_args()
     if err ~= nil then
-       return nil, string.format("failed to get post args to read SAML response, err=%s", err)
+       return nil, string.format("get SAMLResponse POST arg: %s", err)
     end
     -- NOTE: Long args.SAMLResponse will be truncated in nginx log without "..." suffix.
     ngx.log(ngx.DEBUG, "args.SAMLResponse=", args.SAMLResponse)
@@ -48,7 +48,7 @@ function _M.read_and_base64decode_response(self)
         saml_resp = ngx.decode_base64(args.SAMLResponse)
     end
     if saml_resp == "" then
-       return nil, "invalid SAMLResponse"
+       return nil, string.format("decode base64 SAMLResponse: %s", args.SAMLResponse)
     end
     ngx.log(ngx.DEBUG, "saml_resp=", saml_resp)
     return saml_resp

@@ -51,12 +51,23 @@ function _M.issue_id(self, value, expire_seconds_func, config)
         end
         local success, err, forcible = dict:add(id, value, expire_seconds)
         if success then
+            ngx.log(ngx.INFO, 'shdict_store.issue_id id=', id, ', value=', value, ', expire_seconds=', expire_seconds)
             return id
         elseif err ~= "exists" then
-            return nil, string.format('issue_id: %s', err)
+            return nil, string.format('issue_id: err=%s, forcible=%s', err, forcible)
         end
     end
     return nil, 'issue_id: exceeded max_retry_count'
+end
+
+function _M.delete_id(self, id)
+    local dict = self.dict
+    local success, err, forcible = dict:delete(id)
+    if not success then
+        return string.format('delete_id: err=%s, forcible=%s', err, forcible)
+    end
+    ngx.log(ngx.INFO, 'shdict_store.delete_id id=', id)
+    return nil
 end
 
 function _M.take_uri_before_login(self, request_id, exptime)

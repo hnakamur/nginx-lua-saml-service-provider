@@ -6,87 +6,78 @@ local strings = require('http.client.strings')
 local net_url = require('net.url')
 local json = require('dkjson')
 
-local function with_http_client(f)
+local function new_http_client()
     local c = http_client.new()
     c:set_request_default_opts{
         ssl_verifypeer = false,
         ssl_verifyhost = false,
     }
-    f(c)
-    c:free()
+    return c
 end
 
 TestAccessToken = {}
 function TestAccessToken:testSignVerify()
-    with_http_client(function(c)
-        local resp, err, errcode
+    local c = new_http_client()
+    local resp, err, errcode
 
-        local token_obj = {
-            payload = {
-                iss = "https://sp.example.com",
-                aud = "https://sp.example.com",
-                sub = "john-doe",
-                mail = "john.doe@example.com",
-                exp = 1586347800,
-                nbf = 1586347500,
-                jti = "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
-                nonce = "YYYYYYYYYYYYYYYYYYY"
-            }
+    local token_obj = {
+        payload = {
+            iss = "https://sp.example.com",
+            aud = "https://sp.example.com",
+            sub = "john-doe",
+            mail = "john.doe@example.com",
+            exp = 1586347800,
+            nbf = 1586347500,
+            jti = "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            nonce = "YYYYYYYYYYYYYYYYYYY"
         }
-        local req = c:new_request{
-            method = 'POST',
-            url = 'https://sp.example.com/test/sign-jwt',
-            body = json.encode(token_obj)
-        }
-        resp, err, errcode = c:send_request(req)
-        lu.assertIsNil(err, 'response#1 err')
-        lu.assertEquals(resp.status_code, 200, 'response#1 status_code')
-        local signed_token = resp.body
+    }
+    local req = c:new_request{
+        method = 'POST',
+        url = 'https://sp.example.com/test/sign-jwt',
+        body = json.encode(token_obj)
+    }
+    resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#1 err')
+    lu.assertEquals(resp.status_code, 200, 'response#1 status_code')
+    local signed_token = resp.body
 
-        req = c:new_request{
-            method = 'POST',
-            url = 'https://sp.example.com/test/verify-jwt',
-            body = signed_token
-        }
-        resp, err, errcode = c:send_request(req)
-        lu.assertIsNil(err, 'response#2 err')
-        -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
-        -- print('resp.body:', resp.body)
-        lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
-        -- local jwt_token = json.decode(resp.body)
-        -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
+    req = c:new_request{
+        method = 'POST',
+        url = 'https://sp.example.com/test/verify-jwt',
+        body = signed_token
+    }
+    resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#2 err')
+    -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
+    -- print('resp.body:', resp.body)
+    lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
+    -- local jwt_token = json.decode(resp.body)
+    -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
 
-        req = c:new_request{
-            method = 'POST',
-            url = 'https://sp.example.com/test/verify-jwt',
-            body = signed_token
-        }
-        req.header:add('Disable-All-Keys', '1')
-        resp, err, errcode = c:send_request(req)
-        lu.assertIsNil(err, 'response#2 err')
-        -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
-        -- print('resp.body:', resp.body)
-        lu.assertEquals(resp.status_code, 403, 'response#2 status_code')
-        -- local jwt_token = json.decode(resp.body)
-        -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
-    end)
+    req = c:new_request{
+        method = 'POST',
+        url = 'https://sp.example.com/test/verify-jwt',
+        body = signed_token
+    }
+    req.header:add('Disable-All-Keys', '1')
+    resp, err, errcode = c:send_request(req)
+    lu.assertIsNil(err, 'response#2 err')
+    -- print('resp.header[X-Verify-Error]:', resp.header:get('X-Verify-Error'))
+    -- print('resp.body:', resp.body)
+    lu.assertEquals(resp.status_code, 403, 'response#2 status_code')
+    -- local jwt_token = json.decode(resp.body)
+    -- lu.assertIsTrue(jwt_token.verified, 'jwt_token.verified')
+
+    c:free()
 end
 
 TestServiceProvider = {}
 function TestServiceProvider:testLoginSuccess()
-    local http_client = require('http.client')
-
-    local c = http_client.new()
-    c:set_request_default_opts{
-        ssl_verifypeer = false,
-        ssl_verifyhost = false,
-    }
-
-    local resp, err, errcode
+    local c = new_http_client()
     -- Send first request and receive redirect
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = 'https://sp.example.com/' }
-    )
+    local req = c:new_request{ url = 'https://sp.example.com/' }
+    local resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#1 err')
     lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
     lu.assertEquals(resp.status_line, 'HTTP/1.1 302 Moved Temporarily', 'response#1 status_line')
@@ -97,9 +88,8 @@ function TestServiceProvider:testLoginSuccess()
     lu.assertIsString(u.query['SAMLRequest'], 'response#1 redirect_url query has SAMLRequest parameter')
 
     -- Follow redirect
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = redirect_url }
-    )
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#2 err')
     lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
     lu.assertEquals(resp.status_line, 'HTTP/1.1 200 OK', 'response#2 status_line')
@@ -108,47 +98,41 @@ function TestServiceProvider:testLoginSuccess()
     -- Finish login
     local url = resp.header:get('X-Destination')
     local body = resp.body
-    resp, err, errcode = c:send_request(
-        c:new_request{
-            method = 'POST',
-            url = url,
-            body = body,
-        }
-    )
+    req = c:new_request{
+        method = 'POST',
+        url = url,
+        body = body,
+    }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#3 err')
     lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
 
     -- Access the site
-    local resp
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = redirect_url }
-    )
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#4 err')
     lu.assertEquals(resp.status_code, 200, 'response#4 status_code')
     lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'response#4 body')
 
     -- Logout
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = 'https://sp.example.com/sso/logout' }
-    )
+    req = c:new_request{ url = 'https://sp.example.com/sso/logout' }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#5 err')
     lu.assertEquals(resp.status_code, 302, 'response#5 status_code')
     redirect_url = resp:redirect_url()
     lu.assertEquals(redirect_url, 'https://sp.example.com/sso/logout-finished', 'response#5 redirect_url')
 
     -- Logouted
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = redirect_url }
-    )
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#6 err')
     lu.assertEquals(resp.status_code, 200, 'response#6 status_code')
 
     -- Try to access the site again and redirected to IdP
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = 'https://sp.example.com/' }
-    )
+    req = c:new_request{ url = 'https://sp.example.com/' }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#7 err')
     lu.assertEquals(resp.status_code, 302, 'response#7 status_code')
     lu.assertEquals(resp.status_line, 'HTTP/1.1 302 Moved Temporarily', 'response#7 status_line')
@@ -162,33 +146,19 @@ function TestServiceProvider:testLoginSuccess()
 end
 
 function TestServiceProvider:testFinishLoginReplayAttackProtection()
-    local http_client = require('http.client')
+    local c = new_http_client()
+    local c2 = new_http_client()
 
-    local c = http_client.new()
-    c:set_request_default_opts{
-        ssl_verifypeer = false,
-        ssl_verifyhost = false,
-    }
-
-    local c2 = http_client.new()
-    c2:set_request_default_opts{
-        ssl_verifypeer = false,
-        ssl_verifyhost = false,
-    }
-
-    local resp, err, errcode
     -- Send first request and receive redirect
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = 'https://sp.example.com/' }
-    )
+    local req = c:new_request{ url = 'https://sp.example.com/' }
+    local resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#1 err')
     lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
     local redirect_url = resp:redirect_url()
 
     -- Follow redirect
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = redirect_url }
-    )
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#2 err')
     lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
     lu.assertIsNil(resp:redirect_url(), 'response#2 redirect_url')
@@ -196,26 +166,26 @@ function TestServiceProvider:testFinishLoginReplayAttackProtection()
     -- Finish login
     local url = resp.header:get('X-Destination')
     local body = resp.body
-    resp, err, errcode = c:send_request(
-        c:new_request{
-            method = 'POST',
-            url = url,
-            body = body,
-        }
-    )
+    req = c:new_request{
+        method = 'POST',
+        url = url,
+        body = body,
+    }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#3 err')
     lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
     redirect_url = resp:redirect_url()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
+    -- print('jwt_id=', resp.header:get('jwt-id'))
+    -- print('jwt_nonce=', resp.header:get('jwt-nonce'))
 
     -- Replay attack by another client
-    resp, err, errcode = c2:send_request(
-        c:new_request{
-            method = 'POST',
-            url = url,
-            body = body,
-        }
-    )
+    req = c:new_request{
+        method = 'POST',
+        url = url,
+        body = body,
+    }
+    resp, err, errcode = c2:send_request(req)
     lu.assertIsNil(err, 'attacker response err')
     lu.assertEquals(resp.status_code, 403, 'attacker response status_code')
     redirect_url = resp:redirect_url()
@@ -227,21 +197,13 @@ end
 
 
 function TestServiceProvider:testURLAfterLoginSuccess()
-    local http_client = require('http.client')
+    local c = new_http_client()
 
-    local c = http_client.new()
-    c:set_request_default_opts{
-        ssl_verifypeer = false,
-        ssl_verifyhost = false,
-    }
-
-    local resp, err, errcode
     -- Send first request and receive redirect
     local first_url_path = '/foo'
     local first_url = 'https://sp.example.com' .. first_url_path
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = first_url }
-    )
+    local req = c:new_request{ url = first_url }
+    local resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#1 err')
     lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
     local redirect_url = resp:redirect_url()
@@ -249,45 +211,38 @@ function TestServiceProvider:testURLAfterLoginSuccess()
         'response#1 redirect_url prefix')
 
     -- Follow redirect
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = redirect_url }
-    )
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#2 err')
     lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
 
     -- Finish login
     local url = resp.header:get('X-Destination')
     local body = resp.body
-    resp, err, errcode = c:send_request(
-        c:new_request{
-            method = 'POST',
-            url = url,
-            body = body,
-        }
-    )
+    req = c:new_request{
+        method = 'POST',
+        url = url,
+        body = body,
+    }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#3 err')
     redirect_url = resp:redirect_url()
     lu.assertEquals(redirect_url, first_url, 'response#3 redirect_url')
+    -- print('set-cookie form finish login: ', resp.header:get('set-cookie'))
 
     -- Access the site
-    local resp
-    resp, err, errcode = c:send_request(
-        c:new_request{ url = redirect_url }
-    )
+    req = c:new_request{ url = redirect_url }
+    resp, err, errcode = c:send_request(req)
     lu.assertIsNil(err, 'response#4 err')
     lu.assertEquals(resp.body,
         string.format('Welcome to %s, mail=john.doe@example.com\n', first_url_path),
         'response#4 body')
+
+    c:free()
 end
 
 function TestServiceProvider:testFinishLoginBadBody()
-    local http_client = require('http.client')
-
-    local c = http_client.new()
-    c:set_request_default_opts{
-        ssl_verifypeer = false,
-        ssl_verifyhost = false,
-    }
+    local c = new_http_client()
 
     local cases = {
         { body = '' },
@@ -295,16 +250,17 @@ function TestServiceProvider:testFinishLoginBadBody()
         { body = 'SAMLResponse=foo' },
     }
     for i, tc in ipairs(cases) do
-        local resp, err, errcode = c:send_request(
-            c:new_request{
-                method = 'POST',
-                url = 'https://sp.example.com/sso/finish-login',
-                body = tc.body
-            }
-        )
+        local req = c:new_request{
+            method = 'POST',
+            url = 'https://sp.example.com/sso/finish-login',
+            body = tc.body
+        }
+        local resp, err, errcode = c:send_request(req)
         lu.assertIsNil(err, string.format('case %d: err', i))
         lu.assertEquals(resp.status_code, 403, string.format('case %d: status_code', i))
     end
+
+    c:free()
 end
 
 os.exit(lu.LuaUnit.run())

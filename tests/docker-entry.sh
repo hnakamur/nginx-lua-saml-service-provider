@@ -2,7 +2,7 @@
 
 # unit test
 export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;/usr/local/lbase64/?.lua;/usr/lib/nginx/lua/?.lua;;'
-luajit unit_test.lua
+luajit unit_test.lua --verbose
 ret=$?
 if [ $ret -ne 0 ]; then
     echo "unit test failed: $ret"
@@ -23,7 +23,7 @@ while ! timeout 1 bash -c "echo > /dev/tcp/localhost/443" 2> /dev/null; do
   sleep 1
 done
 export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;/usr/local/lbase64/?.lua;./vendor/?.lua;;'
-luajit test.lua "$@"
+luajit test.lua --verbose "$@"
 if [ $? -eq 0 ]; then
     kill $nginx_pid
 else
