@@ -54,7 +54,10 @@ function _M.access(self)
         -- The value MUST NOT exceed 80 bytes in length
         local uri_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
         local cfg = self.config.session.store.request_id
-        local request_id, err = ts:issue_id(uri_before_login, cfg.expire_seconds, cfg)
+        local expire_seconds_func = function()
+            return cfg.expire_seconds
+        end
+        local request_id, err = ts:issue_id(uri_before_login, expire_seconds_func, cfg)
         if err ~= nil then
             return api_error.new{
                 err_code = 'err_issue_request_id',
@@ -99,7 +102,7 @@ function _M.finish_login(self)
 
     local vals = sp_resp:take_values_from_response(response_xml)
 
-    local not_on_or_after, err = time.parse_iso8601_utc_time(vals.not_on_or_after)
+    local req_expire_timestamp, err = time.parse_iso8601_utc_time(vals.not_on_or_after)
     if err ~= nil then
         -- Malicious date value attack.
         return api_error.new{
@@ -108,10 +111,10 @@ function _M.finish_login(self)
             log_detail = string.format('finish_login, err=%s', err)
         }
     end
-    local request_exptime = not_on_or_after - ngx.time()
+    local req_exptime = req_expire_timestamp - ngx.time()
 
     local ts = self:token_store()
-    local redirect_uri, ok, err = ts:take_uri_before_login(vals.request_id, request_exptime)
+    local redirect_uri, ok, err = ts:take_uri_before_login(vals.request_id, req_exptime)
     ngx.log(ngx.DEBUG, 'after take_uri_before_login, redirect_uri=', redirect_uri, ', ok=', ok, ', err=', err)
     if err ~= nil or not ok then
         return api_error.new{
@@ -131,7 +134,7 @@ function _M.finish_login(self)
         }
     end
 
-    local exptime, err = time.parse_iso8601_utc_time(vals.session_not_on_or_after)
+    local session_expire_timestamp, err = time.parse_iso8601_utc_time(vals.session_not_on_or_after)
     if err ~= nil then
         -- Malicious date value attack.
         return api_error.new{
@@ -141,7 +144,7 @@ function _M.finish_login(self)
         }
     end
 
-    local session_id_or_jwt, err = ts:store(key_attr, exptime)
+    local session_id_or_jwt, err = ts:store(key_attr, session_expire_timestamp)
     if err ~= nil then
         return api_error.new{
             status_code = ngx.HTTP_FORBIDDEN,

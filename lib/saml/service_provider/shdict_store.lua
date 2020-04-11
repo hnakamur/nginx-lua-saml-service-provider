@@ -38,10 +38,17 @@ function _M.new(self, config)
     }, mt)
 end
 
-function _M.issue_id(self, value, expire_seconds, config)
+function _M.issue_id(self, value, expire_seconds_func, config)
     local dict = self.dict
+    -- NOTE: The time resoution for shared dict is 0.001 second.
+    -- https://github.com/openresty/lua-nginx-module#ngxshareddictset
+    local minimum_exptime = 0.001
     for i = 1, config.issue_max_retry_count do
         local id = config.prefix .. random.hex(config.random_byte_len)
+        local expire_seconds = expire_seconds_func()
+        if expire_seconds < minimum_exptime then
+            return nil, 'issue_id: expired before issueing'
+        end
         local success, err, forcible = dict:add(id, value, expire_seconds)
         if success then
             return id
