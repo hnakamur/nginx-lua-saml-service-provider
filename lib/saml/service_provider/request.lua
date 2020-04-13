@@ -11,50 +11,17 @@ function _M.new(self, config)
     return setmetatable({
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
-        sp_saml_finish_url = config.sp_saml_finish_url,
-        request_id_generator = config.request_id_generator,
-        urls_before_login = config.urls_before_login
+        sp_saml_finish_url = config.sp_saml_finish_url
     }, mt)
 end
 
-function _M.redirect_to_idp_to_login(self)
-    local request_id, err = self:issue_request_id()
-    if err ~= nil then
-        return nil, err
-    end
-
+function _M.redirect_to_idp_to_login(self, request_id)
     local req, err = self:create_compress_base64encode_request(request_id)
     if err ~= nil then
         return nil, err
     end
-    local url = self.idp_dest_url .. "?" .. ngx.encode_args({SAMLRequest = req})
+    local url = self.idp_dest_url .. "?" .. ngx.encode_args{SAMLRequest = req}
     return ngx.redirect(url)
-end
-
-function _M.issue_request_id(self)
-    local dict_name = self.urls_before_login.dict_name
-    local expire_seconds = self.urls_before_login.expire_seconds
-    local request_id_generator = self.request_id_generator
-
-    local dict = dict_name ~= nil and ngx.shared[dict_name] or nil
-    if dict == nil then
-        return request_id_generator()
-    end
-
-    local url_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
-    local request_id, success, err, forcible
-    repeat
-        request_id = request_id_generator()
-        success, err, forcible = dict:add(request_id, url_before_login, expire_seconds)
-    until success or err ~= "exists"
-
-    if not success then
-        return nil,
-            string.format("error to add url before login, dict=%s, request_id=%s, err=%s, forcible=%s",
-                          dict_name, request_id, err, forcible)
-    end
-
-    return request_id
 end
 
 function _M.create_compress_base64encode_request(self, request_id)

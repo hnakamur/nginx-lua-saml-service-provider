@@ -22,18 +22,18 @@ return {
             secure = true
         },
         store = {
-            store_type = "shdict", -- or "redis"
-            shared_dict_name = "sso_sessions",
-            -- store_type = "redis",
-            -- redis = {
-            --     host = "127.0.0.1",
-            --     port = 6379,
-            --     connect_timeout_seconds = 1,
-            --     send_timeout_seconds = 1,
-            --     read_timeout_seconds = 1,
-            --     connection_pool_keepalive_seconds = 10,
-            --     connection_pool_size = 100,
-            -- },
+            store_type = "redis",
+            redis = {
+                host = "127.0.0.1",
+                port = 6379,
+                connect_options = { -- https://github.com/openresty/lua-resty-redis#connect
+                },
+                connect_timeout_seconds = 1,
+                send_timeout_seconds = 1,
+                read_timeout_seconds = 1,
+                connection_pool_keepalive_seconds = 10,
+                connection_pool_size = 100,
+            },
             request_id = {
                 prefix = "_",
                 random_byte_len = 16,

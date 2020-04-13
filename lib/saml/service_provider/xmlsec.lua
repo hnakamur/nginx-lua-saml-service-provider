@@ -1016,29 +1016,30 @@ end
 --                            Example:
 --                            { attrName = "ID", nodeName = "Response",
 --                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
--- @return err                nil if verified successfully, the error message otherwise (string).
+-- @return ok                 verified successfully or not (bool).
+-- @return err                the error message (string or nil).
 function _M.verify_response(response_xml, idp_cert, id_attr)
     local mngr, dsigCtx, doc
-    local err = (function()
+    local ok, err = (function()
         local err = appInit()
         if err ~= nil then
-            return err
+            return false, err
         end
 
         mngr = xmlsec1.xmlSecKeysMngrCreate()
         if mngr == nil then
-            return "failed to initialize keys manager."
+            return false, "failed to initialize keys manager."
         end
 
         if xmlsec1openssl.xmlSecOpenSSLAppDefaultKeysMngrInit(mngr) < 0 then
-            return "failed to initialize OpenSSL keys manager."
+            return false, "failed to initialize OpenSSL keys manager."
         end
 
         if appCryptoSimpleKeysMngrCertLoad(
                 mngr, idp_cert,
                 xmlsec1.xmlSecKeyDataFormatPem,
                 xmlsec1.xmlSecKeyDataTypeTrusted) < 0 then
-            return "failed to load trusted cert"
+            return false, "failed to load trusted cert"
         end
 
         local startNode
@@ -1048,24 +1049,24 @@ function _M.verify_response(response_xml, idp_cert, id_attr)
                 xmlsec1.xmlSecDSigNs,
                 id_attr)
         if err ~= nil then
-            return err
+            return false, err
         end
 
         dsigCtx = xmlsec1.xmlSecDSigCtxCreate(mngr)
         if dsigCtx == nil then
-            return "failed to create signature context"
+            return false, "failed to create signature context"
         end
 
         local ret = xmlsec1.xmlSecDSigCtxVerify(dsigCtx, startNode)
         if ret < 0 then
-            return "failed to verify signature"
+            return false, nil
         end
 
         if dsigCtx.status ~= xmlsec1.xmlSecDSigStatusSucceeded then
-            return "verify status is not succeeded"
+            return false, nil
         end
 
-        return nil
+        return true, nil
     end)()
 
     -- cleanup
@@ -1080,8 +1081,7 @@ function _M.verify_response(response_xml, idp_cert, id_attr)
     end
     appShutdown()
 
-    -- NOTE: nil err means verify success.
-    return err
+    return ok, err
 end
 
 --- Signs a simple SAML response on memory.

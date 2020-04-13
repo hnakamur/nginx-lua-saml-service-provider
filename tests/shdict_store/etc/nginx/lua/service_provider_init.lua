@@ -1,4 +1,6 @@
-(function()
+ngx.log(ngx.INFO, 'service_provider_init.lua start')
+
+;(function()
 
 function readfile(filename)
     local lines = {}
@@ -12,3 +14,5 @@ local config = require "saml.service_provider.config"
 config.response.idp_certificate = readfile('/etc/nginx/idp.example.com.crt')
 
 end)()
+
+ngx.log(ngx.INFO, 'service_provider_init.lua end')
