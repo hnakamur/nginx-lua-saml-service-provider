@@ -15,30 +15,29 @@ RUN apt-get install -y libxmlsec1 libxmlsec1-openssl lua-cjson \
  && ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1.so \
  && ln -s $(readlink /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so.1) /usr/lib/x86_64-linux-gnu/libxmlsec1-openssl.so
 
-RUN apt-get install -y redis \
- && sed -i -e 's/^bind 127.0.0.1 ::1$/bind 127.0.0.1/' /etc/redis/redis.conf
+RUN mkdir /etc/nginx/saml
 
 RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
     -set_serial 1 \
     -days 365 \
     -subj "/C=JP/ST=Osaka/L=Osaka City/CN=sp.example.com" \
-    -out /etc/nginx/sp.example.com.crt \
-    -keyout /etc/nginx/sp.example.com.key
+    -out /etc/nginx/saml/sp.example.com.crt \
+    -keyout /etc/nginx/saml/sp.example.com.key
 
 RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
     -set_serial 1 \
     -days 365 \
     -subj "/C=JP/ST=Osaka/L=Osaka City/CN=idp.example.com" \
-    -out /etc/nginx/idp.example.com.crt \
-    -keyout /etc/nginx/idp.example.com.key
+    -out /etc/nginx/saml/idp.example.com.crt \
+    -keyout /etc/nginx/saml/idp.example.com.key
+
+RUN apt-get install -y redis \
+ && sed -i -e 's/^bind 127.0.0.1 ::1$/bind 127.0.0.1/' /etc/redis/redis.conf
 
 RUN apt-get install -y libcurl4 git \
  && ln -s libcurl.so.4 /usr/lib/x86_64-linux-gnu/libcurl.so \
  && cd /usr/local \
  && git clone https://github.com/hnakamur/luajit-http-client
-
-RUN cd /usr/local \
- && git clone https://github.com/iskolbin/lbase64
 
 RUN apt-get install -y rsync curl
 

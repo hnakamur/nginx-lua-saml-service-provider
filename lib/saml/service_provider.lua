@@ -9,6 +9,7 @@ local redis_store = require "saml.service_provider.redis_store"
 local shdict_store = require "saml.service_provider.shdict_store"
 local access_token = require "saml.service_provider.access_token"
 local cjson = require "cjson.safe"
+local xmlsec = require "saml.service_provider.xmlsec"
 
 local setmetatable = setmetatable
 
