@@ -287,6 +287,7 @@ function _M.session_cookie(self)
     cookie = session_cookie:new{
         name = config.name,
         path = config.path,
+        domain = config.domain,
         secure = config.secure
     }
     self._session_cookie = cookie

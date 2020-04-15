@@ -5,6 +5,7 @@ local http_client = require('http.client')
 local strings = require('http.client.strings')
 local net_url = require('net.url')
 local json = require('dkjson')
+local sp_config = require('saml.service_provider.config')
 
 local function new_http_client()
     local c = http_client.new()
@@ -13,6 +14,17 @@ local function new_http_client()
         ssl_verifyhost = false,
     }
     return c
+end
+
+function get_domain_from_set_cookie_val(set_cookie_val)
+    local i = string.find(set_cookie_val, '=', 1, true)
+    local cookie_val = string.sub(set_cookie_val, i + 1)
+    for pair in string.gmatch(cookie_val, '([^;]+);%s*') do
+        if strings.has_prefix(pair, 'Domain=') then
+            return string.sub(pair, #'Domain=' + 1)
+        end
+    end
+    return nil
 end
 
 TestAccessToken = {}
@@ -102,6 +114,10 @@ function TestServiceProvider:testLoginSuccess()
     lu.assertNotNil(redirect_url, 'response#3 redirect_url')
     local token = resp.header:get('set-cookie')
     lu.assertNotNil(token, 'response#3 token')
+    local cookie_domain = get_domain_from_set_cookie_val(token)
+    local cookie_config = sp_config.session.cookie
+    local config_cookie_domain = cookie_config.domain
+	lu.assertEquals(cookie_domain, config_cookie_domain, 'response#3 cookie set-domain')
 
     -- Access the site
     req = c:new_request{ url = redirect_url }
