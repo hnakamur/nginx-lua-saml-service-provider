@@ -1366,10 +1366,10 @@ function _M.verify_response(response_xml, idp_cert, id_attr)
             return false, err
         end
 
-        local valid = validateXMLWithSchemaDoc(doc)
-        if not valid then
-            return false, "verify_response validate with xml schema failed"
-        end
+        -- local valid = validateXMLWithSchemaDoc(doc)
+        -- if not valid then
+        --     return false, "verify_response validate with xml schema failed"
+        -- end
 
         dsigCtx = xmlsec1.xmlSecDSigCtxCreate(mngr)
         if dsigCtx == nil then
