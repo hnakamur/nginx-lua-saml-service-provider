@@ -9,6 +9,9 @@ local cfg = {}
 for k, v in pairs(config.test.access_token) do
     cfg[k] = v
 end
+cfg['iss'] = config.request.sp_entity_id
+cfg['aud'] = config.request.sp_entity_id
+cfg['required_keys'] = {'sub', 'mail'}
 if ngx.var.http_disable_all_keys ~= nil then
    cfg.keys = {}
 end

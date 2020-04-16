@@ -31,6 +31,7 @@ return {
         request_id = {
             prefix = "_",
             random_byte_len = 16,
+            expire_seconds = 5 * 60, -- 5 minutes
         },
         jwt_id = {
             prefix = "t",

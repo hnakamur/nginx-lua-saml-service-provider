@@ -6,6 +6,26 @@ local _M = {}
 local mt = { __index = _M }
 
 -- Example token_obj in JSON:
+--
+-- relay_state
+-- {
+--   "header": {
+--     "typ":"JWT",
+--     "alg":"HS256",
+--     "kid": "key_2020_001_ZZZZZZZZZZZZZZZ"
+--   },
+--   "payload": {
+--     "iss": "https://sp.example.com",
+--     "aud": "https://sp.example.com",
+--     "request_id": "_YYYYYYYYYYYYYY",
+--     "redirect_uri": "/",
+--     "exp": 1586347800,
+--     "nbf": 1586347500,
+--     "jti": "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
+--   }
+-- }
+--
+-- access_token
 -- {
 --   "header": {
 --     "typ":"JWT",
@@ -45,11 +65,15 @@ function _M.verify(config, token_str)
         __jwt = function(val, claim, jwt_json)
             return val.header ~= nil and val.header.alg == config.algorithm
         end,
-        sub = validators.required(),
+        iss = validators.equals(config.iss),
+        aud = validators.equals(config.aud),
         exp = validators.required(validators.is_not_expired()),
         nbf = validators.required(validators.is_not_before()),
-        mail = validators.required()
+        jti = validators.required(),
     }
+    for i, k in ipairs(config.required_keys) do
+        claim_spec[k] = validators.required()
+    end
     local jwt_obj = jwt:verify(key_func, token_str, claim_spec)
     if not jwt_obj.verified then
         return _M.new(jwt_obj), jwt_obj.reason

@@ -31,20 +31,13 @@ RUN openssl req -new -newkey rsa:2048 -sha1 -x509 -nodes \
     -out /etc/nginx/saml/idp.example.com.crt \
     -keyout /etc/nginx/saml/idp.example.com.key
 
-RUN apt-get install -y redis \
- && sed -i -e 's/^bind 127.0.0.1 ::1$/bind 127.0.0.1/' /etc/redis/redis.conf
-
-RUN apt-get install -y libcurl4 git \
+RUN apt-get update \
+ && apt-get install -y libcurl4 git \
  && ln -s libcurl.so.4 /usr/lib/x86_64-linux-gnu/libcurl.so \
  && cd /usr/local \
  && git clone https://github.com/hnakamur/luajit-http-client
 
 RUN apt-get install -y rsync curl
-
-RUN cd /tmp \
- && git clone https://github.com/hnakamur/nginx-lua-session \
- && cd nginx-lua-session \
- && cp -pr lib/* /usr/lib/nginx/lua/
 
 COPY tests/ /usr/local/ngx-lua-saml-sp-test/
 COPY lib/ /usr/lib/nginx/lua/
