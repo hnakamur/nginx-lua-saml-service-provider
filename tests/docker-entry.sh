@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # unit test
+
 export LUA_PATH='/usr/local/luajit-http-client/lib/?.lua;/usr/local/luajit-http-client/vendor/?.lua;/usr/local/lbase64/?.lua;/usr/lib/nginx/lua/?.lua;;'
 luajit unit_test.lua --verbose
 ret=$?
@@ -27,6 +28,7 @@ luajit test.lua --verbose "$@"
 if [ $? -eq 0 ]; then
     echo 'shdict_store test OK!'
     kill $nginx_pid
+    #wait $nginx_pid
 else
     tail -n 20 /var/log/nginx/error.log
     cat <<EOF
