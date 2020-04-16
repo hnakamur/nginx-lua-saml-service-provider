@@ -20,7 +20,6 @@ local mt = { __index = _M }
 --     "exp": 1586347800,
 --     "nbf": 1586347500,
 --     "jti": "XXXXXXXXXXXXXXXXXXXXXXXXXXX",
---     "nonce": "YYYYYYYYYYYYYYYYYYY"
 --   }
 -- }
 
@@ -46,7 +45,9 @@ function _M.verify(config, token_str)
         __jwt = function(val, claim, jwt_json)
             return val.header ~= nil and val.header.alg == config.algorithm
         end,
-        -- exp = validators.required(validators.opt_is_not_expired()),
+        sub = validators.required(),
+        exp = validators.required(validators.is_not_expired()),
+        nbf = validators.required(validators.is_not_before()),
         mail = validators.required()
     }
     local jwt_obj = jwt:verify(key_func, token_str, claim_spec)
