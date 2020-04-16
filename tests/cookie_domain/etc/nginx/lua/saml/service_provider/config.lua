@@ -22,9 +22,30 @@ return {
             domain = "example.com",
             secure = true
         },
+        relay_state_cookie = {
+            name = "sso_relay_state",
+            path = "/",
+            domain = "example.com",
+            secure = true
+        },
+        request_id = {
+            prefix = "_",
+            random_byte_len = 16,
+        },
+        jwt_id = {
+            prefix = "t",
+            random_byte_len = 16,
+        },
+        jwt_sign = {
+            algorithm = 'HS256',
+            current_key_id = 'key_2020_001_cea3cd1220254c3914b3012db9707894',
+            keys = {
+                ['key_2020_001_cea3cd1220254c3914b3012db9707894'] = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
+            },
+        },
         store = {
             store_type = "shdict", -- or "redis"
-            shared_dict_name = "sso_sessions",
+            shared_dict_name = "sso_finished_logins",
             -- store_type = "redis",
             -- redis = {
             --     host = "127.0.0.1",
@@ -35,31 +56,6 @@ return {
             --     connection_pool_keepalive_seconds = 10,
             --     connection_pool_size = 100,
             -- },
-            request_id = {
-                prefix = "_",
-                random_byte_len = 16,
-                issue_max_retry_count = 10,
-                expire_seconds = 5 * 60, -- 5 minutes
-            },
-            jwt_id = {
-                prefix = "t",
-                random_byte_len = 16,
-                issue_max_retry_count = 10,
-            },
-            jwt_nonce = {
-                prefix = "n",
-                random_byte_len = 16,
-                issue_max_retry_count = 10,
-                duration_after_first_use_seconds = 1,
-                usable_count = 1,
-            },
-            jwt_sign = {
-                algorithm = 'HS256',
-                current_key_id = 'key_2020_001_cea3cd1220254c3914b3012db9707894',
-                keys = {
-                    ['key_2020_001_cea3cd1220254c3914b3012db9707894'] = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
-                },
-            },
         }
     }
 }
