@@ -46,37 +46,38 @@ function _M.access(self)
         if err ~= nil then
             ngx.log(ngx.WARN, err)
         else
-            local nonce = token.payload.nonce
-            local nonce_cfg = self.config.session.store.jwt_nonce
-            local first_use
-            allowed, first_use, err = ss:use_nonce(nonce, nonce_cfg)
-            if err ~= nil then
-                ngx.log(ngx.WARN, err)
-            end
-            if first_use then
-                local session_expire_timestamp = token.payload.exp
-                local session_expire_seconds_func = function()
-                    return session_expire_timestamp - ngx.time()
-                end
-                local new_nonce, err = ss:issue_id(nonce_cfg.usable_count,
-                    session_expire_seconds_func, nonce_cfg)
-                if err ~= nil then
-                    ngx.log(ngx.ERR, err)
-                end
-                local new_token = access_token.new{
-                    payload = token.payload
-                }
-                new_token.payload.nonce = new_nonce
+            allowed = true
+            -- local nonce = token.payload.nonce
+            -- local nonce_cfg = self.config.session.store.jwt_nonce
+            -- local first_use
+            -- allowed, first_use, err = ss:use_nonce(nonce, nonce_cfg)
+            -- if err ~= nil then
+            --     ngx.log(ngx.WARN, err)
+            -- end
+            -- if first_use then
+            --     local session_expire_timestamp = token.payload.exp
+            --     local session_expire_seconds_func = function()
+            --         return session_expire_timestamp - ngx.time()
+            --     end
+            --     local new_nonce, err = ss:issue_id(nonce_cfg.usable_count,
+            --         session_expire_seconds_func, nonce_cfg)
+            --     if err ~= nil then
+            --         ngx.log(ngx.ERR, err)
+            --     end
+            --     local new_token = access_token.new{
+            --         payload = token.payload
+            --     }
+            --     new_token.payload.nonce = new_nonce
 
-                local sign_cfg = self.config.session.store.jwt_sign
-                local signed_token = new_token:sign(sign_cfg)
-                local sc = self:session_cookie()
-                local ok
-                ok, err = sc:set(signed_token)
-                if err ~= nil then
-                    ngx.log(ngx.ERR, err)
-                end
-            end
+            --     local sign_cfg = self.config.session.store.jwt_sign
+            --     local signed_token = new_token:sign(sign_cfg)
+            --     local sc = self:session_cookie()
+            --     local ok
+            --     ok, err = sc:set(signed_token)
+            --     if err ~= nil then
+            --         ngx.log(ngx.ERR, err)
+            --     end
+            -- end
         end
         if err ~= nil or not allowed then
             -- NOTE: uri_before_login can be long so we store it in shared dict
@@ -172,13 +173,13 @@ function _M.finish_login(self)
             return ngx.exit(ngx.HTTP_FORBIDDEN)
         end
 
-        local nonce_cfg = self.config.session.store.jwt_nonce
-        local nonce, err = ss:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
-            nonce_cfg)
-        if err ~= nil then
-            ngx.log(ngx.ERR, err)
-            return ngx.exit(ngx.HTTP_FORBIDDEN)
-        end
+        -- local nonce_cfg = self.config.session.store.jwt_nonce
+        -- local nonce, err = ss:issue_id(nonce_cfg.usable_count, session_expire_seconds_func,
+        --     nonce_cfg)
+        -- if err ~= nil then
+        --     ngx.log(ngx.ERR, err)
+        --     return ngx.exit(ngx.HTTP_FORBIDDEN)
+        -- end
 
         local iss = self.config.request.sp_entity_id
         local aud = iss
@@ -191,7 +192,7 @@ function _M.finish_login(self)
                 exp = session_expire_timestamp,
                 nbf = ngx.time(),
                 jti = jwt_id,
-                nonce = nonce
+                -- nonce = nonce
             }
         }
         local sign_cfg = self.config.session.store.jwt_sign
