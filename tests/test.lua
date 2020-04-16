@@ -159,6 +159,80 @@ function TestServiceProvider:testLoginSuccess()
     c:free()
 end
 
+function TestServiceProvider:testLoginLogoutLoop()
+    local c = new_http_client()
+
+    for i = 1, 200 do
+        if i % 10 == 0 then
+            print('TestServiceProvider i=', i)
+        end
+
+        -- Send first request and receive redirect
+        local req = c:new_request{ url = 'https://sp.example.com/' }
+        local resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#1 err')
+        lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
+        lu.assertEquals(resp.status_line, 'HTTP/1.1 302 Moved Temporarily', 'response#1 status_line')
+        local redirect_url = resp:redirect_url()
+        lu.assertIsTrue(strings.has_prefix(redirect_url, 'https://idp.example.com/mock-idp'),
+            'response#1 redirect_url prefix')
+        local u = net_url.parse(redirect_url)
+        lu.assertIsString(u.query['SAMLRequest'], 'response#1 redirect_url query has SAMLRequest parameter')
+
+        -- Follow redirect
+        req = c:new_request{ url = redirect_url }
+        resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#2 err')
+        lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
+        lu.assertEquals(resp.status_line, 'HTTP/1.1 200 OK', 'response#2 status_line')
+        lu.assertIsNil(resp:redirect_url(), 'response#2 redirect_url')
+
+        -- Finish login
+        local url = resp.header:get('X-Destination')
+        local body = resp.body
+        req = c:new_request{
+            method = 'POST',
+            url = url,
+            body = body,
+        }
+        resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#3 err')
+        lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
+        redirect_url = resp:redirect_url()
+        lu.assertNotNil(redirect_url, 'response#3 redirect_url')
+        local token = resp.header:get('set-cookie')
+        lu.assertNotNil(token, 'response#3 token')
+        local cookie_domain = get_domain_from_set_cookie_val(token)
+        local cookie_config = sp_config.session.cookie
+        local config_cookie_domain = cookie_config.domain
+        lu.assertEquals(cookie_domain, config_cookie_domain, 'response#3 cookie set-domain')
+
+        -- Access the site
+        req = c:new_request{ url = redirect_url }
+        resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#4 err')
+        lu.assertEquals(resp.status_code, 200, 'response#4 status_code')
+        lu.assertEquals(resp.body, 'Welcome to /, mail=john.doe@example.com\n', 'response#4 body')
+
+        -- Logout
+        req = c:new_request{ url = 'https://sp.example.com/sso/logout' }
+        resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#5 err')
+        lu.assertEquals(resp.status_code, 302, 'response#5 status_code')
+        redirect_url = resp:redirect_url()
+        lu.assertEquals(redirect_url, 'https://sp.example.com/sso/logout-finished', 'response#5 redirect_url')
+
+        -- Logouted
+        req = c:new_request{ url = redirect_url }
+        resp, err, errcode = c:send_request(req)
+        lu.assertIsNil(err, 'response#6 err')
+        lu.assertEquals(resp.status_code, 200, 'response#6 status_code')
+    end
+
+    c:free()
+end
+
+
 function TestServiceProvider:testFinishLoginReplayAttackProtection()
     local c = new_http_client()
     local c2 = new_http_client()
