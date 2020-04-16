@@ -18,6 +18,11 @@ typedef struct {
     int pos;
 } xsdReadContext, *xsdReadContextPtr;
 
+typedef struct {
+    int len;
+    const char *buf;
+} handleErrUserData, *handleErrUserDataxPtr;
+
 typedef signed long time_t;
 
 //-------------------------------------------------------
@@ -470,6 +475,8 @@ typedef int (/* XMLCALL */ *xmlInputCloseCallback) (void * context);
 						 xmlInputOpenCallback openFunc,
 						 xmlInputReadCallback readFunc,
 						 xmlInputCloseCallback closeFunc);
+/* XMLPUBFUN */ int /* XMLCALL */
+  xmlPopInputCallbacks      (void);
 
 //--------------
 // xmlschemas.h
@@ -999,6 +1006,11 @@ local function globalParseError(userData, err)
     end
     ngx.log(ngx.WARN, string.format('saml.service_provider.xmlsec xmlParseError: %s', msg))
 end
+-- NOTE: We explicitly cast the above lua function to a C function pointer
+--       and keep it to avoid "too many callbacks" error.
+--       See "Callback resource handling" in https://luajit.org/ext_ffi_semantics.html
+--       for detail.
+local globalParseError_Cfunc = ffi.cast('xmlStructuredErrorFunc', globalParseError)
 
 local function has_suffix(s, suffix)
     return #s >= #suffix and string.sub(s, -#suffix) == suffix
@@ -1058,46 +1070,60 @@ local function xsdClose(context)
     return 0
 end
 
+local xsdMatchC = ffi.cast('xmlInputMatchCallback', xsdMatch)
+local xsdOpenC = ffi.cast('xmlInputOpenCallback', xsdOpen)
+local xsdReadC = ffi.cast('xmlInputReadCallback', xsdRead)
+local xsdCloseC = ffi.cast('xmlInputCloseCallback', xsdClose)
+
+local function handleParseError(userDataC, err)
+    local userData = ffi.cast('handleErrUserDataxPtr', userDataC)
+    local msg = ffiStrTrimRight(err.message)
+    local fileLine = errFileLine(err)
+    if fileLine ~= "" then
+        msg = fileLine .. ': ' .. msg
+    end
+    userData.len = #msg
+    userData.buf = msg
+end
+local handleParseError_Cfunc = ffi.cast('xmlStructuredErrorFunc', handleParseError)
+
 local function initParseXMLSchema(schema)
-    xml2.xmlSetStructuredErrorFunc(nil, globalParseError)
-    if xml2.xmlRegisterInputCallbacks(xsdMatch, xsdOpen, xsdRead, xsdClose) ~= 0 then
+    if xml2.xmlRegisterInputCallbacks(xsdMatchC, xsdOpenC, xsdReadC, xsdCloseC) == -1 then
         ngx.log(ngx.EMERG, 'error in xmlRegisterInputCallbacks')
     end
     local ctxt = xml2.xmlSchemaNewParserCtxt(schema)
-    local parseErrMsg
-    local function parseError(userData, err)
-        local msg = ffiStrTrimRight(err.message)
-        local fileLine = errFileLine(err)
-        if fileLine ~= "" then
-            msg = fileLine .. ': ' .. msg
-        end
-        parseErrMsg = msg
-    end
-    xml2.xmlSchemaSetParserStructuredErrors(ctxt, parseError, nil)
+
+    local userData = ffi.new('handleErrUserData')
+    xml2.xmlSchemaSetParserStructuredErrors(ctxt, handleParseError_Cfunc, userData)
     local wxschemas = xml2.xmlSchemaParse(ctxt)
+    xml2.xmlPopInputCallbacks();
     if wxschemas == nil then
-        ngx.log(ngx.EMERG, string.format("saml.service_provider.xmlsec initParseXMLSchema error: %s", parseErrMsg))
+        ngx.log(ngx.EMERG, string.format("saml.service_provider.xmlsec initParseXMLSchema error: %s", ffi.string(userData.buf, userData.len)))
         return
     end
     return wxschemas
 end
 
-local function validateXMLWithSchemaDoc(doc)
+local function handleValidError(userDataC, err)
+    local userData = ffi.cast('handleErrUserDataxPtr', userDataC)
+    local msg = ffiStrTrimRight(err.message)
+    local fileLine = errFileLine(err)
+    if fileLine ~= "" then
+        msg = fileLine .. ': ' .. msg
+    end
+    userData.len = #msg
+    userData.buf = msg
+end
+local handleValidError_Cfunc = ffi.cast('xmlStructuredErrorFunc', handleValidError)
+
+function _M.validateXMLWithSchemaDoc(doc)
     local wxschemas = initParseXMLSchema('saml-schema-protocol-2.0.xsd')
     local vctxt = xml2.xmlSchemaNewValidCtxt(wxschemas)
-    local validateErrMsg
-    local function validateError(dst, err)
-        local msg = ffiStrTrimRight(err.message)
-        local fileLine = errFileLine(err)
-        if fileLine ~= "" then
-            msg = fileLine .. ': ' .. msg
-        end
-        validateErrMsg = msg
-    end
-    xml2.xmlSchemaSetValidStructuredErrors(vctxt, validateError, nil)
+    local userData = ffi.new('handleErrUserData')
+    xml2.xmlSchemaSetValidStructuredErrors(vctxt, handleValidError_Cfunc, userData)
     local ret = xml2.xmlSchemaValidateDoc(vctxt, doc)
     if ret ~= 0 then
-        ngx.log(ngx.ERR, string.format("saml.service_provider.xmlsec error, ret=%d, message=%s", ret, validateErrMsg))
+        ngx.log(ngx.WARN, string.format("saml.service_provider.xmlsec xmlSchemaValidateDoc error: %s", ffi.string(userData.buf, userData.len)))
     end
     xml2.xmlSchemaFreeValidCtxt(vctxt)
     return ret == 0
@@ -1142,6 +1168,8 @@ local function appInit()
     if err ~= nil then
         return err
     end
+
+    xml2.xmlSetStructuredErrorFunc(nil, globalParseError_Cfunc)
 
     return nil
 end
@@ -1366,7 +1394,7 @@ function _M.verify_response(response_xml, idp_cert, id_attr)
             return false, err
         end
 
-        local valid = validateXMLWithSchemaDoc(doc)
+        local valid = _M.validateXMLWithSchemaDoc(doc)
         if not valid then
             return false, "verify_response validate with xml schema failed"
         end
@@ -1402,6 +1430,7 @@ function _M.verify_response(response_xml, idp_cert, id_attr)
 
     return ok, err
 end
+
 
 --- Signs a simple SAML response on memory.
 --
