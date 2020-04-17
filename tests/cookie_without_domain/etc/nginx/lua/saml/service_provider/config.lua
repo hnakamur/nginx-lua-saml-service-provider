@@ -25,7 +25,6 @@ return {
         cookie = {
             name = "sso_access_token",
             path = "/",
-            secure = true
         },
     },
     jwt = {

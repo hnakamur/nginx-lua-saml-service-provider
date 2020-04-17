@@ -27,7 +27,6 @@ return {
             name = "sso_access_token",
             path = "/",
             -- domain = "example.com", -- set this if you use multiple subdomain like *.example.com
-            secure = true
         },
     },
     jwt = {

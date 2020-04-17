@@ -27,7 +27,6 @@ return {
             name = "sso_access_token",
             path = "/",
             domain = "example.com",
-            secure = true
         },
     },
     jwt = {
