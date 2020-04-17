@@ -122,8 +122,8 @@ function _M.access(self)
             return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
         end
 
-        local sp_req = self:request()
-        return sp_req:redirect_to_idp_to_login(request_id)
+        local req = self:request(request_id)
+        return req:redirect_to_idp_to_login()
     end
 
     for _, name in ipairs(self.config.response.attribute_names) do
@@ -231,20 +231,13 @@ function _M.logout(self)
 end
 
 
-function _M.request(self)
-    local request = self._request
-    if request ~= nil then
-        return request
-    end
-
+function _M.request(self, request_id)
     local config = self.config.request
-    request = saml_sp_request:new{
+    return saml_sp_request.new(request_id, {
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
         sp_saml_finish_url = config.sp_saml_finish_url,
-    }
-    self._request = request
-    return request
+    })
 end
 
 function _M.response(self)
