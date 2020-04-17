@@ -1,5 +1,4 @@
 return {
-    key_attribute_name = "mail",
     redirect = {
         url_after_logout = "/sso/logout-finished"
     },
@@ -13,7 +12,8 @@ return {
             attrName = "ID",
             nsHref = "urn:oasis:names:tc:SAML:2.0:protocol",
             nodeName = "Response"
-        }
+        },
+        attribute_names = {"mail"},
     },
     session = {
         cookie = {

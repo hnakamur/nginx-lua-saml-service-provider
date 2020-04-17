@@ -56,7 +56,7 @@ function _M._access_token_verify_cfg(self)
     end
     cfg['iss'] = self.config.request.sp_entity_id
     cfg['aud'] = self.config.request.sp_entity_id
-    cfg['required_keys'] = {'sub', 'mail'}
+    cfg['required_keys'] = {'sub'}
     return cfg
 end
 
@@ -125,11 +125,10 @@ function _M.access(self)
         return sp_req:redirect_to_idp_to_login(request_id)
     end
 
-    local name_id = token.payload.sub
-    local key_attr_name = self.config.key_attribute_name
-    local key_attr = token.payload[key_attr_name]
-    ngx.req.set_header('name-id', name_id)
-    ngx.req.set_header(key_attr_name, key_attr)
+    for _, name in ipairs(self.config.response.attribute_names) do
+        ngx.req.set_header(name, token.payload[name])
+    end
+    ngx.req.set_header('name-id', token.payload.sub)
     return nil
 end
 
@@ -167,13 +166,6 @@ function _M.finish_login(self)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 
-    local key_attr_name = self.config.key_attribute_name
-    local key_attr = vals.attrs[key_attr_name]
-    if key_attr == nil then
-        ngx.log(ngx.WARN, 'key_attr not found in SAMLResponse')
-        return ngx.exit(ngx.HTTP_FORBIDDEN)
-    end
-
     local req_expire_timestamp, err = time.parse_iso8601_utc_time(vals.not_on_or_after)
     if err ~= nil then
         -- Malicious date value attack.
@@ -197,12 +189,14 @@ function _M.finish_login(self)
             iss = iss,
             aud = aud,
             sub = vals.name_id,
-            mail = key_attr,
             exp = session_expire_timestamp,
             nbf = ngx.time(),
             jti = jwt_id,
         }
     }
+    for _, name in ipairs(self.config.response.attribute_names) do
+        token.payload[name] = vals.attrs[name]
+    end
     local sign_cfg = self.config.session.jwt_sign
     local signed_token = token:sign(sign_cfg)
     local sc = self:session_cookie()
