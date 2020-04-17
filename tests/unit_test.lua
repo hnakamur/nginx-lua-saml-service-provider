@@ -102,8 +102,8 @@ ZUZuh1KuSsL4K1kqFxYGZd2vSO8h5COahlVYCxLgX9F6z+7tj1LCms8=</ds:X509Certificate>
 ]]
 
     local saml_sp_response = require('saml.service_provider.response')
-    local sp_resp = saml_sp_response:new({})
-    local values = sp_resp:take_values_from_response(res_xml)
+    local sp_resp = saml_sp_response.new(res_xml, {})
+    local values = sp_resp:take_values()
     lu.assertEquals(values.name_id, 'john-doe', 'NameID')
     lu.assertEquals(values.request_id, '_888e7b875b0b96ff109dbcdd1b969aa0', 'request ID')
     lu.assertEquals(values.not_on_or_after, '2020-03-17T22:01:15Z', 'request NotOnOrAfter')

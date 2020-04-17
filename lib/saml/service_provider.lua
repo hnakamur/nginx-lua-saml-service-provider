@@ -1,8 +1,8 @@
 -- Copyright (C) by Hiroaki Nakamura (hnakamur)
 
 local session_cookie = require "session.cookie"
-local saml_sp_request = require "saml.service_provider.request"
-local saml_sp_response = require "saml.service_provider.response"
+local saml_request = require "saml.service_provider.request"
+local saml_response = require "saml.service_provider.response"
 local random = require "saml.service_provider.random"
 local time = require "saml.service_provider.time"
 local access_token = require "saml.service_provider.access_token"
@@ -122,7 +122,12 @@ function _M.access(self)
             return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
         end
 
-        local req = self:request(request_id)
+        local req_cfg= self.config.request
+        local req = saml_request.new(request_id, {
+            idp_dest_url = req_cfg.idp_dest_url,
+            sp_entity_id = req_cfg.sp_entity_id,
+            sp_saml_finish_url = req_cfg.sp_saml_finish_url,
+        })
         return req:redirect_to_idp_to_login()
     end
 
@@ -134,15 +139,16 @@ function _M.access(self)
 end
 
 function _M.finish_login(self)
-    local sp_resp = self:response()
-
-    local response_xml, err = sp_resp:read_and_base64decode_response()
+    local response_xml, err = saml_response.read_and_base64decode_response()
     if err ~= nil then
         ngx.log(ngx.WARN, err)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 
-    local ok, err = sp_resp:verify_response_memory(response_xml)
+    local resp_cfg = self.config.response
+    local resp = saml_response.new(response_xml, resp_cfg)
+
+    local ok, err = resp:verify()
     if err ~= nil then
         ngx.log(ngx.WARN, err)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
@@ -152,7 +158,7 @@ function _M.finish_login(self)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 
-    local vals = sp_resp:take_values_from_response(response_xml)
+    local vals = resp:take_values()
 
     local state, err = self:_take_and_verify_relay_state()
     if err ~= nil then
@@ -228,27 +234,6 @@ function _M.logout(self)
         end
     end
     return ngx.redirect(self.config.logout.redirect_url)
-end
-
-
-function _M.request(self, request_id)
-    local config = self.config.request
-    return saml_sp_request.new(request_id, {
-        idp_dest_url = config.idp_dest_url,
-        sp_entity_id = config.sp_entity_id,
-        sp_saml_finish_url = config.sp_saml_finish_url,
-    })
-end
-
-function _M.response(self)
-    local response = self._response
-    if response ~= nil then
-        return response
-    end
-
-    response = saml_sp_response:new(self.config.response)
-    self._response = response
-    return response
 end
 
 function _M.access_token_cookie(self)
