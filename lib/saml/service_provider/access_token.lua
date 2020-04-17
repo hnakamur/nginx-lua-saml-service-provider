@@ -1,5 +1,6 @@
 local jwt = require "resty.jwt"
 local validators = require "resty.jwt-validators"
+local strings = require "saml.service_provider.strings"
 
 local _M = {}
 
@@ -79,6 +80,10 @@ function _M.verify(config, token_str)
         return _M.new(jwt_obj), jwt_obj.reason
     end
     return _M.new(jwt_obj)
+end
+
+function _M.is_expired_err(err)
+    return err ~= nil and strings.has_prefix(err, "'exp' claim expired at")
 end
 
 return _M

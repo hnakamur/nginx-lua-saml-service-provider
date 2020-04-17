@@ -11,7 +11,7 @@ local xmlsec = require "saml.service_provider.xmlsec"
 
 local setmetatable = setmetatable
 
-local _M = { _VERSION = '0.9.0' }
+local _M = { _VERSION = '0.9.5' }
 
 local mt = { __index = _M }
 
@@ -21,7 +21,7 @@ function _M.new(self, config)
     }, mt)
 end
 
-function _M._relay_state_verify_cfg(self)
+function _M._request_token_verify_cfg(self)
     local cfg = {}
     for k, v in pairs(self.config.jwt.sign) do
         cfg[k] = v
@@ -32,21 +32,32 @@ function _M._relay_state_verify_cfg(self)
     return cfg
 end
 
-function _M._take_and_verify_relay_state(self)
+function _M._take_and_verify_request_token(self)
     local rsc = self:request_cookie()
     local signed_state, err = rsc:get()
     ngx.log(ngx.DEBUG, 'signed_state=', signed_state, ', err=', err)
     if err ~= nil then
+        ngx.log(ngx.WARN, 'get request token cookie, err=', err)
         return nil, err
+    elseif signed_state == nil then
+        return nil, nil
     end
-    local ok, err = rsc:set("{}")
+
+    local ok, err = rsc:set("")
     if err ~= nil then
         return nil, nil, string.format('clear request_cookie: %s', err)
     end
 
-    local cfg = self:_relay_state_verify_cfg()
+    local cfg = self:_request_token_verify_cfg()
     local state, err = access_token.verify(cfg, signed_state)
-    return state, err
+    if access_token.is_expired_err(err) then
+        ngx.log(ngx.DEBUG, 'request token is expired')
+        return nil, nil
+    elseif err ~= nil then
+        ngx.log(ngx.WARN, 'request token verify failed, err=', err)
+        return nil, err
+    end
+    return state
 end
 
 function _M._access_token_verify_cfg(self)
@@ -63,72 +74,83 @@ end
 function _M._get_and_verify_token(self)
     local access_token_cookie = self:access_token_cookie()
     local signed_token, err = access_token_cookie:get()
-    ngx.log(ngx.DEBUG, 'signed_token=', signed_token, ', err=', err)
     if err ~= nil then
+        ngx.log(ngx.WARN, 'get access token cookie, err=', err)
         return nil, err
+    elseif signed_token == nil then
+        ngx.log(ngx.DEBUG, 'access token cookie not found')
+        return nil, nil
     end
 
     local cfg = self:_access_token_verify_cfg()
     local token, err = access_token.verify(cfg, signed_token)
-    return token, err
+    if access_token.is_expired_err(err) then
+        ngx.log(ngx.DEBUG, 'access token is expired')
+        return nil, nil
+    elseif err ~= nil then
+        ngx.log(ngx.WARN, 'access token verify failed, err=', err)
+        return nil, err
+    end
+    return token
 end
 
 function _M.issue_id(config)
     return config.prefix .. random.hex(config.random_byte_len)
 end
 
+function _M.redirect_to_login(self)
+    -- NOTE: uri_before_login can be long so we store it
+    -- in request_cookie instead of setting it to RelayState.
+    --
+    -- Document identifier: saml-bindings-2.0-os
+    -- Location: http://docs.oasis-open.org/security/saml/v2.0/
+    -- 3.4.3 RelayState
+    -- The value MUST NOT exceed 80 bytes in length
+    local uri_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
+    local req_id_cfg = self.config.request.id
+    local request_id = _M.issue_id(req_id_cfg)
+
+    local jti = _M.issue_id(self.config.jwt.jti)
+    local iss = self.config.request.sp_entity_id
+    local aud = iss
+    local now = ngx.time()
+    local request_token = access_token.new{
+        payload = {
+            iss = iss,
+            aud = aud,
+            request_id = request_id,
+            redirect_uri = uri_before_login,
+            exp = now + req_id_cfg.expire_seconds,
+            nbf = now,
+            jti = jti,
+        }
+    }
+    local sign_cfg = self.config.jwt.sign
+    local signed_state = request_token:sign(sign_cfg)
+
+    local rsc = self:request_cookie()
+    local ok, err = rsc:set(signed_state)
+    if err ~= nil then
+        ngx.log(ngx.ERR, err)
+        return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
+    end
+
+    local req_cfg= self.config.request
+    local req = saml_request.new(request_id, {
+        idp_dest_url = req_cfg.idp_dest_url,
+        sp_entity_id = req_cfg.sp_entity_id,
+        sp_saml_finish_url = req_cfg.sp_saml_finish_url,
+    })
+    return req:redirect_to_idp_to_login()
+end
+
 function _M.access(self)
-    local allowed
     local token, err = self:_get_and_verify_token()
     if err ~= nil then
         ngx.log(ngx.WARN, err)
-    else
-        allowed = true
     end
-    if err ~= nil or not allowed then
-        -- NOTE: uri_before_login can be long so we store it
-        -- in request_cookie instead of setting it to RelayState.
-        --
-        -- Document identifier: saml-bindings-2.0-os
-        -- Location: http://docs.oasis-open.org/security/saml/v2.0/
-        -- 3.4.3 RelayState
-        -- The value MUST NOT exceed 80 bytes in length
-        local uri_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
-        local req_id_cfg = self.config.request.id
-        local request_id = _M.issue_id(req_id_cfg)
-
-        local jti = _M.issue_id(self.config.jwt.jti)
-        local iss = self.config.request.sp_entity_id
-        local aud = iss
-        local now = ngx.time()
-        local relay_state = access_token.new{
-            payload = {
-                iss = iss,
-                aud = aud,
-                request_id = request_id,
-                redirect_uri = uri_before_login,
-                exp = now + req_id_cfg.expire_seconds,
-                nbf = now,
-                jti = jti,
-            }
-        }
-        local sign_cfg = self.config.jwt.sign
-        local signed_state = relay_state:sign(sign_cfg)
-
-        local rsc = self:request_cookie()
-        local ok, err = rsc:set(signed_state)
-        if err ~= nil then
-            ngx.log(ngx.ERR, err)
-            return ngx.exit(ngx.HTTP_INTERNAL_SERVER_ERROR)
-        end
-
-        local req_cfg= self.config.request
-        local req = saml_request.new(request_id, {
-            idp_dest_url = req_cfg.idp_dest_url,
-            sp_entity_id = req_cfg.sp_entity_id,
-            sp_saml_finish_url = req_cfg.sp_saml_finish_url,
-        })
-        return req:redirect_to_idp_to_login()
+    if token == nil then
+        return self:redirect_to_login()
     end
 
     for _, name in ipairs(self.config.response.attribute_names) do
@@ -160,10 +182,12 @@ function _M.finish_login(self)
 
     local vals = resp:take_values()
 
-    local state, err = self:_take_and_verify_relay_state()
+    local state, err = self:_take_and_verify_request_token()
     if err ~= nil then
         ngx.log(ngx.WARN, err)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
+    elseif state == nil then
+        return self:redirect_to_login()
     end
     local request_id = state.payload.request_id
     local redirect_uri = state.payload.redirect_uri
@@ -217,7 +241,7 @@ function _M.finish_login(self)
 end
 
 function _M.logout(self)
-    local token, err = self:_get_and_verify_token()
+    local _, err = self:_get_and_verify_token()
     if err ~= nil then
         ngx.log(ngx.WARN, 'logout: get and verify token: ', err)
     else
