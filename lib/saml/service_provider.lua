@@ -61,8 +61,8 @@ function _M._access_token_verify_cfg(self)
 end
 
 function _M._get_and_verify_token(self)
-    local session_cookie = self:session_cookie()
-    local signed_token, err = session_cookie:get()
+    local access_token_cookie = self:access_token_cookie()
+    local signed_token, err = access_token_cookie:get()
     ngx.log(ngx.DEBUG, 'signed_token=', signed_token, ', err=', err)
     if err ~= nil then
         return nil, err
@@ -200,7 +200,7 @@ function _M.finish_login(self)
     end
     local sign_cfg = self.config.jwt.sign
     local signed_token = token:sign(sign_cfg)
-    local sc = self:session_cookie()
+    local sc = self:access_token_cookie()
     local ok, err = sc:set(signed_token)
     if err ~= nil then
         ngx.log(ngx.ERR, err)
@@ -221,8 +221,8 @@ function _M.logout(self)
         -- the Unix epoch date
         -- with set-cookie, so we have to change the cookie value instead
         -- of deleting it.
-        local sc = self:session_cookie()
-        local ok, err = sc:set("{}")
+        local sc = self:access_token_cookie()
+        local ok, err = sc:set("")
         if err ~= nil then
             ngx.log(ngx.ERR, 'logout: set cookie to empty: ', err)
         end
@@ -258,8 +258,8 @@ function _M.response(self)
     return response
 end
 
-function _M.session_cookie(self)
-    local config = self.config.session.cookie
+function _M.access_token_cookie(self)
+    local config = self.config.access_token.cookie
     return session_cookie:new(config)
 end
 

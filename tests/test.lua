@@ -538,7 +538,7 @@ function TestServiceProvider:testLoginSuccess()
     local token = resp.header:get('set-cookie')
     lu.assertNotNil(token, 'response#3 token')
     local cookie_domain = get_domain_from_set_cookie_val(token)
-    local cookie_config = sp_config.session.cookie
+    local cookie_config = sp_config.access_token.cookie
     local config_cookie_domain = cookie_config.domain
 	lu.assertEquals(cookie_domain, config_cookie_domain, 'response#3 cookie set-domain')
 
@@ -624,7 +624,7 @@ function TestServiceProvider:testLoginLogoutLoop()
         local token = resp.header:get('set-cookie')
         lu.assertNotNil(token, 'response#3 token')
         local cookie_domain = get_domain_from_set_cookie_val(token)
-        local cookie_config = sp_config.session.cookie
+        local cookie_config = sp_config.access_token.cookie
         local config_cookie_domain = cookie_config.domain
         if cookie_domain ~= config_cookie_domain then
             print('set-cookie value=', token)

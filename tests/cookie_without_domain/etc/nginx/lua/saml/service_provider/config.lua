@@ -21,7 +21,7 @@ return {
         },
         attribute_names = {"mail"},
     },
-    session = {
+    access_token = {
         cookie = {
             name = "sso_access_token",
             path = "/",
