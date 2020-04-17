@@ -1,7 +1,4 @@
 return {
-    redirect = {
-        url_after_logout = "/sso/logout-finished"
-    },
     request = {
         idp_dest_url = "https://idp.example.com/mock-idp",
         sp_entity_id = "https://sp.example.com/sso",
@@ -44,5 +41,8 @@ return {
                 ['key_2020_001_cea3cd1220254c3914b3012db9707894'] = 'Ny5qaJJDXNMjOr+MFFnJoM1LSKr+5F5T',
             },
         },
-    }
+    },
+    logout = {
+        redirect_url = "/sso/logout-finished"
+    },
 }

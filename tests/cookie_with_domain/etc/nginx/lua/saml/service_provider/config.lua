@@ -1,7 +1,4 @@
 return {
-    redirect = {
-        url_after_logout = "/sso/logout-finished"
-    },
     request = {
         idp_dest_url = "https://idp.example.com/mock-idp",
         sp_entity_id = "https://sp.example.com/sso",
@@ -58,5 +55,8 @@ return {
             --     connection_pool_size = 100,
             -- },
         }
-    }
+    },
+    logout = {
+        redirect_url = "/sso/logout-finished"
+    },
 }

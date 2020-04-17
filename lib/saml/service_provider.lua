@@ -227,7 +227,7 @@ function _M.logout(self)
             ngx.log(ngx.ERR, 'logout: set cookie to empty: ', err)
         end
     end
-    return ngx.redirect(self.config.redirect.url_after_logout)
+    return ngx.redirect(self.config.logout.redirect_url)
 end
 
 
