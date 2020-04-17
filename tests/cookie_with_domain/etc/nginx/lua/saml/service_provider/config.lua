@@ -5,7 +5,12 @@ return {
     request = {
         idp_dest_url = "https://idp.example.com/mock-idp",
         sp_entity_id = "https://sp.example.com/sso",
-        sp_saml_finish_url = "https://sp.example.com/sso/finish-login"
+        sp_saml_finish_url = "https://sp.example.com/sso/finish-login",
+        id = {
+            prefix = "_",
+            random_byte_len = 16,
+            expire_seconds = 5 * 60, -- 5 minutes
+        },
     },
     response = {
         id_attr = {
@@ -27,11 +32,6 @@ return {
             path = "/",
             domain = "example.com",
             secure = true
-        },
-        request_id = {
-            prefix = "_",
-            random_byte_len = 16,
-            expire_seconds = 5 * 60, -- 5 minutes
         },
         jwt_id = {
             prefix = "t",

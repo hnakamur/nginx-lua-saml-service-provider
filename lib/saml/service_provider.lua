@@ -94,7 +94,8 @@ function _M.access(self)
         -- 3.4.3 RelayState
         -- The value MUST NOT exceed 80 bytes in length
         local uri_before_login = ngx.var.uri .. ngx.var.is_args .. (ngx.var.args ~= nil and ngx.var.args or "")
-        local request_id = _M.issue_id(self.config.session.request_id)
+        local req_id_cfg = self.config.request.id
+        local request_id = _M.issue_id(req_id_cfg)
 
         local jwt_id  = _M.issue_id(self.config.session.jwt_id)
         local iss = self.config.request.sp_entity_id
@@ -106,7 +107,7 @@ function _M.access(self)
                 aud = aud,
                 request_id = request_id,
                 redirect_uri = uri_before_login,
-                exp = now + self.config.session.request_id.expire_seconds,
+                exp = now + req_id_cfg.expire_seconds,
                 nbf = now,
                 jti = jwt_id,
             }

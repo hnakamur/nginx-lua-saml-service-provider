@@ -39,6 +39,12 @@ RUN apt-get update \
 
 RUN apt-get install -y rsync curl
 
+RUN cd /tmp \
+ && git clone https://github.com/hnakamur/nginx-lua-session \
+ && cd nginx-lua-session \
+ && git checkout support_all_params  \
+ && cp -pr lib/* /usr/lib/nginx/lua/
+
 COPY tests/ /usr/local/ngx-lua-saml-sp-test/
 COPY lib/ /usr/lib/nginx/lua/
 
