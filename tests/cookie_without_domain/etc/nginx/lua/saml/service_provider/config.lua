@@ -8,6 +8,10 @@ return {
             random_byte_len = 16,
             expire_seconds = 5 * 60, -- 5 minutes
         },
+        cookie = {
+            name = "sso_request",
+            path = "/",
+        },
     },
     response = {
         id_attr = {
@@ -20,11 +24,6 @@ return {
     session = {
         cookie = {
             name = "sso_access_token",
-            path = "/",
-            secure = true
-        },
-        relay_state_cookie = {
-            name = "sso_relay_state",
             path = "/",
             secure = true
         },

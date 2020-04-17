@@ -33,7 +33,7 @@ function _M._relay_state_verify_cfg(self)
 end
 
 function _M._take_and_verify_relay_state(self)
-    local rsc = self:relay_state_cookie()
+    local rsc = self:request_cookie()
     local signed_state, err = rsc:get()
     ngx.log(ngx.DEBUG, 'signed_state=', signed_state, ', err=', err)
     if err ~= nil then
@@ -41,7 +41,7 @@ function _M._take_and_verify_relay_state(self)
     end
     local ok, err = rsc:set("{}")
     if err ~= nil then
-        return nil, nil, string.format('clear relay_state_cookie: %s', err)
+        return nil, nil, string.format('clear request_cookie: %s', err)
     end
 
     local cfg = self:_relay_state_verify_cfg()
@@ -87,7 +87,7 @@ function _M.access(self)
     end
     if err ~= nil or not allowed then
         -- NOTE: uri_before_login can be long so we store it
-        -- in relay_state_cookie instead of setting it to RelayState.
+        -- in request_cookie instead of setting it to RelayState.
         --
         -- Document identifier: saml-bindings-2.0-os
         -- Location: http://docs.oasis-open.org/security/saml/v2.0/
@@ -115,7 +115,7 @@ function _M.access(self)
         local sign_cfg = self.config.session.jwt_sign
         local signed_state = relay_state:sign(sign_cfg)
 
-        local rsc = self:relay_state_cookie()
+        local rsc = self:request_cookie()
         local ok, err = rsc:set(signed_state)
         if err ~= nil then
             ngx.log(ngx.ERR, err)
@@ -263,8 +263,8 @@ function _M.session_cookie(self)
     return session_cookie:new(config)
 end
 
-function _M.relay_state_cookie(self)
-    local config = self.config.session.relay_state_cookie
+function _M.request_cookie(self)
+    local config = self.config.request.cookie
     return session_cookie:new(config)
 end
 
