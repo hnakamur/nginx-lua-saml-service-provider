@@ -27,11 +27,13 @@ return {
             path = "/",
             secure = true
         },
-        jwt_id = {
+    },
+    jwt = {
+        jti = {
             prefix = "t",
             random_byte_len = 16,
         },
-        jwt_sign = {
+        sign = {
             algorithm = 'HS256',
             current_key_id = 'key_2020_001_cea3cd1220254c3914b3012db9707894',
             keys = {

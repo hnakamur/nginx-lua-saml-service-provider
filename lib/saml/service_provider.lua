@@ -23,7 +23,7 @@ end
 
 function _M._relay_state_verify_cfg(self)
     local cfg = {}
-    for k, v in pairs(self.config.session.jwt_sign) do
+    for k, v in pairs(self.config.jwt.sign) do
         cfg[k] = v
     end
     cfg['iss'] = self.config.request.sp_entity_id
@@ -51,7 +51,7 @@ end
 
 function _M._access_token_verify_cfg(self)
     local cfg = {}
-    for k, v in pairs(self.config.session.jwt_sign) do
+    for k, v in pairs(self.config.jwt.sign) do
         cfg[k] = v
     end
     cfg['iss'] = self.config.request.sp_entity_id
@@ -97,7 +97,7 @@ function _M.access(self)
         local req_id_cfg = self.config.request.id
         local request_id = _M.issue_id(req_id_cfg)
 
-        local jwt_id  = _M.issue_id(self.config.session.jwt_id)
+        local jti = _M.issue_id(self.config.jwt.jti)
         local iss = self.config.request.sp_entity_id
         local aud = iss
         local now = ngx.time()
@@ -109,10 +109,10 @@ function _M.access(self)
                 redirect_uri = uri_before_login,
                 exp = now + req_id_cfg.expire_seconds,
                 nbf = now,
-                jti = jwt_id,
+                jti = jti,
             }
         }
-        local sign_cfg = self.config.session.jwt_sign
+        local sign_cfg = self.config.jwt.sign
         local signed_state = relay_state:sign(sign_cfg)
 
         local rsc = self:request_cookie()
@@ -182,7 +182,7 @@ function _M.finish_login(self)
         return ngx.exit(ngx.HTTP_FORBIDDEN)
     end
 
-    local jwt_id  = _M.issue_id(self.config.session.jwt_id)
+    local jti = _M.issue_id(self.config.jwt.jti)
     local iss = self.config.request.sp_entity_id
     local aud = iss
     local token = access_token.new{
@@ -192,13 +192,13 @@ function _M.finish_login(self)
             sub = vals.name_id,
             exp = session_expire_timestamp,
             nbf = ngx.time(),
-            jti = jwt_id,
+            jti = jti,
         }
     }
     for _, name in ipairs(self.config.response.attribute_names) do
         token.payload[name] = vals.attrs[name]
     end
-    local sign_cfg = self.config.session.jwt_sign
+    local sign_cfg = self.config.jwt.sign
     local signed_token = token:sign(sign_cfg)
     local sc = self:session_cookie()
     local ok, err = sc:set(signed_token)
