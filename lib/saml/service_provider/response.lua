@@ -10,6 +10,7 @@ local _M = {}
 local mt = { __index = _M }
 
 --- Creates a SAML response verifier object.
+-- @param response_xml        response_xml (string).
 -- @param config              configuration options (table).
 --
 -- config.idp_certificate     IdP certificate (string).
@@ -18,22 +19,19 @@ local mt = { __index = _M }
 --                            Example:
 --                            { attrName = "ID", nodeName = "Response",
 --                              nsHref = "urn:oasis:names:tc:SAML:2.0:protocol" }
--- Deprecated keys:
--- config.xmlsec_command      the filename of xmlsec1 command.
--- config.idp_cert_filename   the filename of IdP certificate.
 -- @return a SAML response verifier object.
-function _M.new(self, config)
+function _M.new(response_xml, config)
     return setmetatable({
+        response_xml = response_xml,
         idp_certificate = config.idp_certificate,
         id_attr = config.id_attr
     }, mt)
 end
 
 --- Read and base64 decode a SAML response from the request body.
--- @param self a SAML response veirifier.
 -- @return a decoded SAML response.
 -- @return err.
-function _M.read_and_base64decode_response(self)
+function _M.read_and_base64decode_response()
     ngx.req.read_body()
     local args, err = ngx.req.get_post_args()
     if err ~= nil then
@@ -60,20 +58,17 @@ end
 -- In addition to refular verification we ensure that the signature
 -- has only one <dsig:Reference/> element.
 --
--- @param self           a SAML response verifier.
--- @param response_xml   response XML (string).
+-- @param self           a SAML response.
 -- @return ok            verified successfully or not (bool).
 -- @return err           the error message (string or nil).
-function _M.verify_response_memory(self, response_xml)
-    -- TODO: Investigate if we can suppress error to be printed to stdout or stderr
-    return xmlsec.verify_response(response_xml, self.idp_certificate, self.id_attr)
+function _M.verify(self)
+    return xmlsec.verify_response(self.response_xml, self.idp_certificate, self.id_attr)
 end
 
 --- Take values from a SAML response.
--- @param self            a SAML response veirifier.
--- @param response_xml    a SAML response (string).
+-- @param self            a SAML response.
 -- @return values (table).
-function _M.take_values_from_response(self, response_xml)
+function _M.take_values(self)
     local wantsNameID = false
     local name_id
 
@@ -128,7 +123,7 @@ function _M.take_values_from_response(self, response_xml)
         attribute = handleAttribute,
         text = handleText
     }
-    parser:parse(response_xml, {stripWhitespace=true})
+    parser:parse(self.response_xml, {stripWhitespace=true})
     return {
         name_id = name_id,
         request_id = request_id,

@@ -34,8 +34,8 @@ function TestAccessToken:testSignVerifyOK()
 
     local token_obj = {
         payload = {
-            iss = "https://sp.example.com",
-            aud = "https://sp.example.com",
+            iss = "https://sp.example.com/sso",
+            aud = "https://sp.example.com/sso",
             sub = "john-doe",
             mail = "john.doe@example.com",
             exp = os.time() + 5,
@@ -84,8 +84,8 @@ function TestAccessToken:testSignVerifySessionExpired()
 
     local token_obj = {
         payload = {
-            iss = "https://sp.example.com",
-            aud = "https://sp.example.com",
+            iss = "https://sp.example.com/sso",
+            aud = "https://sp.example.com/sso",
             sub = "john-doe",
             mail = "john.doe@example.com",
             exp = os.time() - 5,
@@ -124,8 +124,8 @@ function TestAccessToken:testSignVerifyBadNbf()
 
     local token_obj = {
         payload = {
-            iss = "https://sp.example.com",
-            aud = "https://sp.example.com",
+            iss = "https://sp.example.com/sso",
+            aud = "https://sp.example.com/sso",
             sub = "john-doe",
             mail = "john.doe@example.com",
             exp = os.time() + 5,
@@ -538,7 +538,7 @@ function TestServiceProvider:testLoginSuccess()
     local token = resp.header:get('set-cookie')
     lu.assertNotNil(token, 'response#3 token')
     local cookie_domain = get_domain_from_set_cookie_val(token)
-    local cookie_config = sp_config.session.cookie
+    local cookie_config = sp_config.access_token.cookie
     local config_cookie_domain = cookie_config.domain
 	lu.assertEquals(cookie_domain, config_cookie_domain, 'response#3 cookie set-domain')
 
@@ -624,7 +624,7 @@ function TestServiceProvider:testLoginLogoutLoop()
         local token = resp.header:get('set-cookie')
         lu.assertNotNil(token, 'response#3 token')
         local cookie_domain = get_domain_from_set_cookie_val(token)
-        local cookie_config = sp_config.session.cookie
+        local cookie_config = sp_config.access_token.cookie
         local config_cookie_domain = cookie_config.domain
         if cookie_domain ~= config_cookie_domain then
             print('set-cookie value=', token)
@@ -653,55 +653,6 @@ function TestServiceProvider:testLoginLogoutLoop()
         lu.assertEquals(resp.status_code, 200, 'response#6 status_code')
     end
 
-    c:free()
-end
-
-
-function TestServiceProvider:testFinishLoginReplayAttackProtection()
-    local c = new_http_client()
-    local c2 = new_http_client()
-
-    -- Send first request and receive redirect
-    local req = c:new_request{ url = 'https://sp.example.com/' }
-    local resp, err, errcode = c:send_request(req)
-    lu.assertIsNil(err, 'response#1 err')
-    lu.assertEquals(resp.status_code, 302, 'response#1 status_code')
-    local redirect_url = resp:redirect_url()
-
-    -- Follow redirect
-    req = c:new_request{ url = redirect_url }
-    resp, err, errcode = c:send_request(req)
-    lu.assertIsNil(err, 'response#2 err')
-    lu.assertEquals(resp.status_code, 200, 'response#2 status_code')
-    lu.assertIsNil(resp:redirect_url(), 'response#2 redirect_url')
-
-    -- Finish login
-    local url = resp.header:get('X-Destination')
-    local body = resp.body
-    req = c:new_request{
-        method = 'POST',
-        url = url,
-        body = body,
-    }
-    resp, err, errcode = c:send_request(req)
-    lu.assertIsNil(err, 'response#3 err')
-    lu.assertEquals(resp.status_code, 302, 'response#3 status_code')
-    redirect_url = resp:redirect_url()
-    lu.assertNotNil(redirect_url, 'response#3 redirect_url')
-
-    -- Replay attack by another client
-    req = c:new_request{
-        method = 'POST',
-        url = url,
-        body = body,
-    }
-    resp, err, errcode = c2:send_request(req)
-    lu.assertIsNil(err, 'attacker response err')
-    lu.assertEquals(resp.status_code, 403, 'attacker response status_code')
-    redirect_url = resp:redirect_url()
-    lu.assertIsNil(redirect_url, 'attacker response redirect_url')
-
-    c2:free()
     c:free()
 end
 

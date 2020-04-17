@@ -7,16 +7,17 @@ local _M = {}
 
 local mt = { __index = _M }
 
-function _M.new(self, config)
+function _M.new(request_id, config)
     return setmetatable({
+        request_id = request_id,
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
         sp_saml_finish_url = config.sp_saml_finish_url
     }, mt)
 end
 
-function _M.redirect_to_idp_to_login(self, request_id)
-    local req, err = self:create_compress_base64encode_request(request_id)
+function _M.redirect_to_idp_to_login(self)
+    local req, err = self:create_compress_base64encode_request()
     if err ~= nil then
         return nil, err
     end
@@ -24,8 +25,8 @@ function _M.redirect_to_idp_to_login(self, request_id)
     return ngx.redirect(url)
 end
 
-function _M.create_compress_base64encode_request(self, request_id)
-    local request_xml = self:create_request_xml(request_id)
+function _M.create_compress_base64encode_request(self)
+    local request_xml = self:create_request_xml()
     local compressed, err = self:compress(request_xml)
     if err ~= nil then
         return nil, err
@@ -34,7 +35,7 @@ function _M.create_compress_base64encode_request(self, request_id)
     return ngx.encode_base64(compressed)
 end
 
-function _M.create_request_xml(self, request_id)
+function _M.create_request_xml(self)
     local now = ngx.utctime()
     local issue_instant = string.sub(now, 1, #"yyyy-mm-dd") .. "T" .. string.sub(now, -#"hh:mm:ss") .. "Z"
 
@@ -45,7 +46,7 @@ function _M.create_request_xml(self, request_id)
 </samlp:AuthnRequest>]],
         self.sp_saml_finish_url,
         self.idp_dest_url,
-        request_id,
+        self.request_id,
         issue_instant,
         self.sp_entity_id
     )

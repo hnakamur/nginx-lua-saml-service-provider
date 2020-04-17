@@ -11,7 +11,6 @@ return {
         cookie = {
             name = "sso_request",
             path = "/",
-            -- domain = "example.com", -- set this if you use multiple subdomain like *.example.com
         },
     },
     response = {
@@ -26,7 +25,6 @@ return {
         cookie = {
             name = "sso_access_token",
             path = "/",
-            -- domain = "example.com", -- set this if you use multiple subdomain like *.example.com
         },
     },
     jwt = {
