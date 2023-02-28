@@ -2,7 +2,7 @@ local _M = {}
 
 function _M.parse_iso8601_utc_time(str)
     -- NOTE: We accept only 'Z' for timezone.
-    local year_s, month_s, day_s, hour_s, min_s, sec_s = str:match('(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)Z')
+    local year_s, month_s, day_s, hour_s, min_s, sec_s, millisec_s = str:match('(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)(%g*)Z')
     if year_s == nil then
         return nil, 'invalid UTC time pattern unmatch'
     end
@@ -29,6 +29,12 @@ function _M.parse_iso8601_utc_time(str)
     local sec = tonumber(sec_s)
     if sec < 0 or 59 < sec then
         return nil, 'invalid sec in UTC time'
+    end
+    if millisec_s:len() ~= 0 then
+        local millisec = tonumber(millisec_s:match('.(%d%d%d)'))
+        if millisec < 0 then
+            return nil, 'invalid millisec in UTC time'
+        end
     end
     return os.time{year=year, month=month, day=day, hour=hour, min=min, sec=sec}
 end
