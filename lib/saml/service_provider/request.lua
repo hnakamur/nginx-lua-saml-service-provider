@@ -1,6 +1,7 @@
 -- Copyright (C) by Hiroaki Nakamura (hnakamur)
 
 local zlib = require "ffi-zlib"
+local evp = require "resty.evp"
 local setmetatable = setmetatable
 
 local _M = {}
@@ -12,7 +13,8 @@ function _M.new(request_id, config)
         request_id = request_id,
         idp_dest_url = config.idp_dest_url,
         sp_entity_id = config.sp_entity_id,
-        sp_saml_finish_url = config.sp_saml_finish_url
+        sp_saml_finish_url = config.sp_saml_finish_url,
+        sp_private_key = config.sp_private_key,
     }, mt)
 end
 
@@ -21,8 +23,26 @@ function _M.redirect_to_idp_to_login(self)
     if err ~= nil then
         return nil, err
     end
-    local url = self.idp_dest_url .. "?" .. ngx.encode_args{SAMLRequest = req}
-    return ngx.redirect(url)
+
+    if self.sp_private_key == nil then
+        local url = self.idp_dest_url .. "?" .. ngx.encode_args{SAMLRequest = req}
+        return ngx.redirect(url)
+    else
+        -- sign the SAMLRequest to authenticate service provider at IdP
+        -- NOTE: Only RSA-SHA256 signature is accepted.
+        local req_encoded = ngx.encode_args{SAMLRequest = req}
+        local alg_encoded = ngx.encode_args{SigAlg = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"}
+        local hash_input = req_encoded .. "&" .. alg_encoded
+        local signer, err  = evp.RSASigner:new(self.sp_private_key)
+        if not signer then
+            ngx.log(ngx.ERR, err)
+            return nil, err
+        end
+        local signature = signer:sign(hash_input, evp.CONST.SHA256_DIGEST)
+        local sig_encoded = ngx.encode_args{Signature = ngx.encode_base64(signature)}
+        local url = self.idp_dest_url .. "?" .. req_encoded .. "&" .. alg_encoded .. "&" .. sig_encoded
+        return ngx.redirect(url)
+    end
 end
 
 function _M.create_compress_base64encode_request(self)

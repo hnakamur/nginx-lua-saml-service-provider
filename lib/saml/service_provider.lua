@@ -140,6 +140,7 @@ function _M.redirect_to_login(self)
         idp_dest_url = req_cfg.idp_dest_url,
         sp_entity_id = req_cfg.sp_entity_id,
         sp_saml_finish_url = req_cfg.sp_saml_finish_url,
+        sp_private_key = req_cfg.sp_private_key,
     })
     return req:redirect_to_idp_to_login()
 end
